@@ -25,7 +25,7 @@ extern "C" {
 #define VK_FUCHSIA_IMAGEPIPE_SURFACE_EXTENSION_NAME "VK_FUCHSIA_imagepipe_surface"
 typedef VkFlags VkImagePipeSurfaceCreateFlagsFUCHSIA;
 typedef struct VkImagePipeSurfaceCreateInfoFUCHSIA {
-    VkStructureType                         sType;
+    VkStructureType                         sType = VK_STRUCTURE_TYPE_IMAGEPIPE_SURFACE_CREATE_INFO_FUCHSIA;
     const void*                             pNext;
     VkImagePipeSurfaceCreateFlagsFUCHSIA    flags;
     zx_handle_t                             imagePipeHandle;
@@ -47,20 +47,20 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateImagePipeSurfaceFUCHSIA(
 #define VK_FUCHSIA_EXTERNAL_MEMORY_SPEC_VERSION 1
 #define VK_FUCHSIA_EXTERNAL_MEMORY_EXTENSION_NAME "VK_FUCHSIA_external_memory"
 typedef struct VkImportMemoryZirconHandleInfoFUCHSIA {
-    VkStructureType                       sType;
+    VkStructureType                       sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_ZIRCON_HANDLE_INFO_FUCHSIA;
     const void*                           pNext;
     VkExternalMemoryHandleTypeFlagBits    handleType;
     zx_handle_t                           handle;
 } VkImportMemoryZirconHandleInfoFUCHSIA;
 
 typedef struct VkMemoryZirconHandlePropertiesFUCHSIA {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_MEMORY_ZIRCON_HANDLE_PROPERTIES_FUCHSIA;
     void*              pNext;
     uint32_t           memoryTypeBits;
 } VkMemoryZirconHandlePropertiesFUCHSIA;
 
 typedef struct VkMemoryGetZirconHandleInfoFUCHSIA {
-    VkStructureType                       sType;
+    VkStructureType                       sType = VK_STRUCTURE_TYPE_MEMORY_GET_ZIRCON_HANDLE_INFO_FUCHSIA;
     const void*                           pNext;
     VkDeviceMemory                        memory;
     VkExternalMemoryHandleTypeFlagBits    handleType;
@@ -88,7 +88,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryZirconHandlePropertiesFUCHSIA(
 #define VK_FUCHSIA_EXTERNAL_SEMAPHORE_SPEC_VERSION 1
 #define VK_FUCHSIA_EXTERNAL_SEMAPHORE_EXTENSION_NAME "VK_FUCHSIA_external_semaphore"
 typedef struct VkImportSemaphoreZirconHandleInfoFUCHSIA {
-    VkStructureType                          sType;
+    VkStructureType                          sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_ZIRCON_HANDLE_INFO_FUCHSIA;
     const void*                              pNext;
     VkSemaphore                              semaphore;
     VkSemaphoreImportFlags                   flags;
@@ -97,7 +97,7 @@ typedef struct VkImportSemaphoreZirconHandleInfoFUCHSIA {
 } VkImportSemaphoreZirconHandleInfoFUCHSIA;
 
 typedef struct VkSemaphoreGetZirconHandleInfoFUCHSIA {
-    VkStructureType                          sType;
+    VkStructureType                          sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_ZIRCON_HANDLE_INFO_FUCHSIA;
     const void*                              pNext;
     VkSemaphore                              semaphore;
     VkExternalSemaphoreHandleTypeFlagBits    handleType;
@@ -135,27 +135,27 @@ typedef enum VkImageConstraintsInfoFlagBitsFUCHSIA {
 } VkImageConstraintsInfoFlagBitsFUCHSIA;
 typedef VkFlags VkImageConstraintsInfoFlagsFUCHSIA;
 typedef struct VkBufferCollectionCreateInfoFUCHSIA {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_BUFFER_COLLECTION_CREATE_INFO_FUCHSIA;
     const void*        pNext;
     zx_handle_t        collectionToken;
 } VkBufferCollectionCreateInfoFUCHSIA;
 
 typedef struct VkImportMemoryBufferCollectionFUCHSIA {
-    VkStructureType              sType;
+    VkStructureType              sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_BUFFER_COLLECTION_FUCHSIA;
     const void*                  pNext;
     VkBufferCollectionFUCHSIA    collection;
     uint32_t                     index;
 } VkImportMemoryBufferCollectionFUCHSIA;
 
 typedef struct VkBufferCollectionImageCreateInfoFUCHSIA {
-    VkStructureType              sType;
+    VkStructureType              sType = VK_STRUCTURE_TYPE_BUFFER_COLLECTION_IMAGE_CREATE_INFO_FUCHSIA;
     const void*                  pNext;
     VkBufferCollectionFUCHSIA    collection;
     uint32_t                     index;
 } VkBufferCollectionImageCreateInfoFUCHSIA;
 
 typedef struct VkBufferCollectionConstraintsInfoFUCHSIA {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_BUFFER_COLLECTION_CONSTRAINTS_INFO_FUCHSIA;
     const void*        pNext;
     uint32_t           minBufferCount;
     uint32_t           maxBufferCount;
@@ -165,7 +165,7 @@ typedef struct VkBufferCollectionConstraintsInfoFUCHSIA {
 } VkBufferCollectionConstraintsInfoFUCHSIA;
 
 typedef struct VkBufferConstraintsInfoFUCHSIA {
-    VkStructureType                             sType;
+    VkStructureType                             sType = VK_STRUCTURE_TYPE_BUFFER_CONSTRAINTS_INFO_FUCHSIA;
     const void*                                 pNext;
     VkBufferCreateInfo                          createInfo;
     VkFormatFeatureFlags                        requiredFormatFeatures;
@@ -173,20 +173,20 @@ typedef struct VkBufferConstraintsInfoFUCHSIA {
 } VkBufferConstraintsInfoFUCHSIA;
 
 typedef struct VkBufferCollectionBufferCreateInfoFUCHSIA {
-    VkStructureType              sType;
+    VkStructureType              sType = VK_STRUCTURE_TYPE_BUFFER_COLLECTION_BUFFER_CREATE_INFO_FUCHSIA;
     const void*                  pNext;
     VkBufferCollectionFUCHSIA    collection;
     uint32_t                     index;
 } VkBufferCollectionBufferCreateInfoFUCHSIA;
 
 typedef struct VkSysmemColorSpaceFUCHSIA {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_SYSMEM_COLOR_SPACE_FUCHSIA;
     const void*        pNext;
     uint32_t           colorSpace;
 } VkSysmemColorSpaceFUCHSIA;
 
 typedef struct VkBufferCollectionPropertiesFUCHSIA {
-    VkStructureType                  sType;
+    VkStructureType                  sType = VK_STRUCTURE_TYPE_BUFFER_COLLECTION_PROPERTIES_FUCHSIA;
     void*                            pNext;
     uint32_t                         memoryTypeBits;
     uint32_t                         bufferCount;
@@ -202,7 +202,7 @@ typedef struct VkBufferCollectionPropertiesFUCHSIA {
 } VkBufferCollectionPropertiesFUCHSIA;
 
 typedef struct VkImageFormatConstraintsInfoFUCHSIA {
-    VkStructureType                         sType;
+    VkStructureType                         sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_CONSTRAINTS_INFO_FUCHSIA;
     const void*                             pNext;
     VkImageCreateInfo                       imageCreateInfo;
     VkFormatFeatureFlags                    requiredFormatFeatures;
@@ -213,7 +213,7 @@ typedef struct VkImageFormatConstraintsInfoFUCHSIA {
 } VkImageFormatConstraintsInfoFUCHSIA;
 
 typedef struct VkImageConstraintsInfoFUCHSIA {
-    VkStructureType                               sType;
+    VkStructureType                               sType = VK_STRUCTURE_TYPE_IMAGE_CONSTRAINTS_INFO_FUCHSIA;
     const void*                                   pNext;
     uint32_t                                      formatConstraintsCount;
     const VkImageFormatConstraintsInfoFUCHSIA*    pFormatConstraints;

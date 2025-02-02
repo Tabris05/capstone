@@ -29,7 +29,6 @@ Renderer::Renderer() {
 		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
 		vkCreateInstance(ptr(VkInstanceCreateInfo{
-			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 			.pApplicationInfo = ptr(VkApplicationInfo{ .apiVersion = VK_API_VERSION_1_4 }),
 			.enabledExtensionCount = glfwExtensionCount,
 			.ppEnabledExtensionNames = glfwExtensions
@@ -48,11 +47,8 @@ Renderer::Renderer() {
 	{
 		m_graphicsQueueFamily = getQueue(VK_QUEUE_GRAPHICS_BIT);
 		vkCreateDevice(m_physicalDevice, ptr(VkDeviceCreateInfo{
-			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 			.pNext = ptr(VkPhysicalDeviceVulkan12Features{
-				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
 				.pNext = ptr(VkPhysicalDeviceVulkan13Features{
-					.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
 					.synchronization2 = true,
 					.dynamicRendering = true
 				}),
@@ -62,7 +58,6 @@ Renderer::Renderer() {
 			}),
 			.queueCreateInfoCount = 1,
 			.pQueueCreateInfos = ptr(VkDeviceQueueCreateInfo{
-				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
 				.queueFamilyIndex = m_graphicsQueueFamily,
 				.queueCount = 1,
 				.pQueuePriorities = ptr(1.0f)
@@ -88,20 +83,17 @@ Renderer::Renderer() {
 	{
 		for(u8 i = 0; i < m_framesInFlight; i++) {
 			vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
-				.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 				.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
 				.queueFamilyIndex = m_graphicsQueueFamily
 			}), nullptr, &m_perFrameData[i].cmdPool);
 			vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
-				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 				.commandPool = m_perFrameData[i].cmdPool,
 				.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 				.commandBufferCount = 1
 			}), &m_perFrameData[i].cmdBuffer);
-			vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO }), nullptr, &m_perFrameData[i].acquireSem);
-			vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{ .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO }), nullptr, &m_perFrameData[i].presentSem);
+			vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_perFrameData[i].acquireSem);
+			vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_perFrameData[i].presentSem);
 			vkCreateFence(m_device, ptr(VkFenceCreateInfo{
-				.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 				.flags = VK_FENCE_CREATE_SIGNALED_BIT
 			}), nullptr, &m_perFrameData[i].fence);
 		}
@@ -141,16 +133,11 @@ void Renderer::run() {
 		vkResetFences(m_device, 1, &frameData.fence);
 		vkResetCommandPool(m_device, frameData.cmdPool, 0);
 		
-		vkBeginCommandBuffer(frameData.cmdBuffer, ptr(VkCommandBufferBeginInfo{
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-		}));
+		vkBeginCommandBuffer(frameData.cmdBuffer, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 
 		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-			.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
 				.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
 				.srcAccessMask = VK_ACCESS_2_NONE,
 				.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
@@ -165,10 +152,8 @@ void Renderer::run() {
 		vkCmdClearColorImage(frameData.cmdBuffer, m_swapchainImages[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, ptr(VkClearColorValue{ 1.0f, 0.0f, 0.0f, 1.0f }), 1, ptr(colorSubresource()));
 
 		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-			.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
 				.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
 				.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
 				.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
@@ -183,7 +168,6 @@ void Renderer::run() {
 		vkEndCommandBuffer(frameData.cmdBuffer);
 
 		vkQueueSubmit(m_graphicsQueue, 1, ptr(VkSubmitInfo{
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 			.waitSemaphoreCount = 1,
 			.pWaitSemaphores = &frameData.acquireSem,
 			.pWaitDstStageMask = ptr<VkPipelineStageFlags>(VK_PIPELINE_STAGE_TRANSFER_BIT),
@@ -194,7 +178,6 @@ void Renderer::run() {
 		}), frameData.fence);
 
 		vkQueuePresentKHR(m_graphicsQueue, ptr(VkPresentInfoKHR{
-			.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 			.waitSemaphoreCount = 1,
 			.pWaitSemaphores = &frameData.presentSem,
 			.swapchainCount = 1,
@@ -228,7 +211,6 @@ void Renderer::createSwapchain() {
 	VkSwapchainKHR oldSwapchain = m_swapchain;
 
 	vkCreateSwapchainKHR(m_device, ptr(VkSwapchainCreateInfoKHR{
-		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
 		.surface = m_surface,
 		.minImageCount = 3,
 		.imageFormat = m_surfaceFormat.format,

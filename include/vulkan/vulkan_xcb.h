@@ -25,7 +25,7 @@ extern "C" {
 #define VK_KHR_XCB_SURFACE_EXTENSION_NAME "VK_KHR_xcb_surface"
 typedef VkFlags VkXcbSurfaceCreateFlagsKHR;
 typedef struct VkXcbSurfaceCreateInfoKHR {
-    VkStructureType               sType;
+    VkStructureType               sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
     const void*                   pNext;
     VkXcbSurfaceCreateFlagsKHR    flags;
     xcb_connection_t*             connection;

@@ -31,7 +31,7 @@ typedef void CAMetalLayer;
 #define VK_EXT_METAL_SURFACE_EXTENSION_NAME "VK_EXT_metal_surface"
 typedef VkFlags VkMetalSurfaceCreateFlagsEXT;
 typedef struct VkMetalSurfaceCreateInfoEXT {
-    VkStructureType                 sType;
+    VkStructureType                 sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
     const void*                     pNext;
     VkMetalSurfaceCreateFlagsEXT    flags;
     const CAMetalLayer*             pLayer;
@@ -100,44 +100,44 @@ typedef enum VkExportMetalObjectTypeFlagBitsEXT {
 } VkExportMetalObjectTypeFlagBitsEXT;
 typedef VkFlags VkExportMetalObjectTypeFlagsEXT;
 typedef struct VkExportMetalObjectCreateInfoEXT {
-    VkStructureType                       sType;
+    VkStructureType                       sType = VK_STRUCTURE_TYPE_EXPORT_METAL_OBJECT_CREATE_INFO_EXT;
     const void*                           pNext;
     VkExportMetalObjectTypeFlagBitsEXT    exportObjectType;
 } VkExportMetalObjectCreateInfoEXT;
 
 typedef struct VkExportMetalObjectsInfoEXT {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_EXPORT_METAL_OBJECTS_INFO_EXT;
     const void*        pNext;
 } VkExportMetalObjectsInfoEXT;
 
 typedef struct VkExportMetalDeviceInfoEXT {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_EXPORT_METAL_DEVICE_INFO_EXT;
     const void*        pNext;
     MTLDevice_id       mtlDevice;
 } VkExportMetalDeviceInfoEXT;
 
 typedef struct VkExportMetalCommandQueueInfoEXT {
-    VkStructureType       sType;
+    VkStructureType       sType = VK_STRUCTURE_TYPE_EXPORT_METAL_COMMAND_QUEUE_INFO_EXT;
     const void*           pNext;
     VkQueue               queue;
     MTLCommandQueue_id    mtlCommandQueue;
 } VkExportMetalCommandQueueInfoEXT;
 
 typedef struct VkExportMetalBufferInfoEXT {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_EXPORT_METAL_BUFFER_INFO_EXT;
     const void*        pNext;
     VkDeviceMemory     memory;
     MTLBuffer_id       mtlBuffer;
 } VkExportMetalBufferInfoEXT;
 
 typedef struct VkImportMetalBufferInfoEXT {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_IMPORT_METAL_BUFFER_INFO_EXT;
     const void*        pNext;
     MTLBuffer_id       mtlBuffer;
 } VkImportMetalBufferInfoEXT;
 
 typedef struct VkExportMetalTextureInfoEXT {
-    VkStructureType          sType;
+    VkStructureType          sType = VK_STRUCTURE_TYPE_EXPORT_METAL_TEXTURE_INFO_EXT;
     const void*              pNext;
     VkImage                  image;
     VkImageView              imageView;
@@ -147,27 +147,27 @@ typedef struct VkExportMetalTextureInfoEXT {
 } VkExportMetalTextureInfoEXT;
 
 typedef struct VkImportMetalTextureInfoEXT {
-    VkStructureType          sType;
+    VkStructureType          sType = VK_STRUCTURE_TYPE_IMPORT_METAL_TEXTURE_INFO_EXT;
     const void*              pNext;
     VkImageAspectFlagBits    plane;
     MTLTexture_id            mtlTexture;
 } VkImportMetalTextureInfoEXT;
 
 typedef struct VkExportMetalIOSurfaceInfoEXT {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_EXPORT_METAL_IO_SURFACE_INFO_EXT;
     const void*        pNext;
     VkImage            image;
     IOSurfaceRef       ioSurface;
 } VkExportMetalIOSurfaceInfoEXT;
 
 typedef struct VkImportMetalIOSurfaceInfoEXT {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_IMPORT_METAL_IO_SURFACE_INFO_EXT;
     const void*        pNext;
     IOSurfaceRef       ioSurface;
 } VkImportMetalIOSurfaceInfoEXT;
 
 typedef struct VkExportMetalSharedEventInfoEXT {
-    VkStructureType      sType;
+    VkStructureType      sType = VK_STRUCTURE_TYPE_EXPORT_METAL_SHARED_EVENT_INFO_EXT;
     const void*          pNext;
     VkSemaphore          semaphore;
     VkEvent              event;
@@ -175,7 +175,7 @@ typedef struct VkExportMetalSharedEventInfoEXT {
 } VkExportMetalSharedEventInfoEXT;
 
 typedef struct VkImportMetalSharedEventInfoEXT {
-    VkStructureType      sType;
+    VkStructureType      sType = VK_STRUCTURE_TYPE_IMPORT_METAL_SHARED_EVENT_INFO_EXT;
     const void*          pNext;
     MTLSharedEvent_id    mtlSharedEvent;
 } VkImportMetalSharedEventInfoEXT;

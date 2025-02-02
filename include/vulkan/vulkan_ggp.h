@@ -25,7 +25,7 @@ extern "C" {
 #define VK_GGP_STREAM_DESCRIPTOR_SURFACE_EXTENSION_NAME "VK_GGP_stream_descriptor_surface"
 typedef VkFlags VkStreamDescriptorSurfaceCreateFlagsGGP;
 typedef struct VkStreamDescriptorSurfaceCreateInfoGGP {
-    VkStructureType                            sType;
+    VkStructureType                            sType = VK_STRUCTURE_TYPE_STREAM_DESCRIPTOR_SURFACE_CREATE_INFO_GGP;
     const void*                                pNext;
     VkStreamDescriptorSurfaceCreateFlagsGGP    flags;
     GgpStreamDescriptor                        streamDescriptor;
@@ -47,7 +47,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateStreamDescriptorSurfaceGGP(
 #define VK_GGP_FRAME_TOKEN_SPEC_VERSION   1
 #define VK_GGP_FRAME_TOKEN_EXTENSION_NAME "VK_GGP_frame_token"
 typedef struct VkPresentFrameTokenGGP {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_PRESENT_FRAME_TOKEN_GGP;
     const void*        pNext;
     GgpFrameToken      frameToken;
 } VkPresentFrameTokenGGP;

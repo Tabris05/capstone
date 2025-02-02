@@ -25,7 +25,7 @@ extern "C" {
 #define VK_MVK_MACOS_SURFACE_EXTENSION_NAME "VK_MVK_macos_surface"
 typedef VkFlags VkMacOSSurfaceCreateFlagsMVK;
 typedef struct VkMacOSSurfaceCreateInfoMVK {
-    VkStructureType                 sType;
+    VkStructureType                 sType = VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK;
     const void*                     pNext;
     VkMacOSSurfaceCreateFlagsMVK    flags;
     const void*                     pView;

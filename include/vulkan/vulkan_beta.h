@@ -24,7 +24,7 @@ extern "C" {
 #define VK_KHR_PORTABILITY_SUBSET_SPEC_VERSION 1
 #define VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME "VK_KHR_portability_subset"
 typedef struct VkPhysicalDevicePortabilitySubsetFeaturesKHR {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR;
     void*              pNext;
     VkBool32           constantAlphaColorBlendFactors;
     VkBool32           events;
@@ -44,7 +44,7 @@ typedef struct VkPhysicalDevicePortabilitySubsetFeaturesKHR {
 } VkPhysicalDevicePortabilitySubsetFeaturesKHR;
 
 typedef struct VkPhysicalDevicePortabilitySubsetPropertiesKHR {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_PROPERTIES_KHR;
     void*              pNext;
     uint32_t           minVertexInputBindingStrideAlignment;
 } VkPhysicalDevicePortabilitySubsetPropertiesKHR;
@@ -57,14 +57,14 @@ typedef struct VkPhysicalDevicePortabilitySubsetPropertiesKHR {
 #define VK_AMDX_SHADER_ENQUEUE_EXTENSION_NAME "VK_AMDX_shader_enqueue"
 #define VK_SHADER_INDEX_UNUSED_AMDX       (~0U)
 typedef struct VkPhysicalDeviceShaderEnqueueFeaturesAMDX {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_FEATURES_AMDX;
     void*              pNext;
     VkBool32           shaderEnqueue;
     VkBool32           shaderMeshEnqueue;
 } VkPhysicalDeviceShaderEnqueueFeaturesAMDX;
 
 typedef struct VkPhysicalDeviceShaderEnqueuePropertiesAMDX {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ENQUEUE_PROPERTIES_AMDX;
     void*              pNext;
     uint32_t           maxExecutionGraphDepth;
     uint32_t           maxExecutionGraphShaderOutputNodes;
@@ -76,7 +76,7 @@ typedef struct VkPhysicalDeviceShaderEnqueuePropertiesAMDX {
 } VkPhysicalDeviceShaderEnqueuePropertiesAMDX;
 
 typedef struct VkExecutionGraphPipelineScratchSizeAMDX {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_EXECUTION_GRAPH_PIPELINE_SCRATCH_SIZE_AMDX;
     void*              pNext;
     VkDeviceSize       minSize;
     VkDeviceSize       maxSize;
@@ -84,7 +84,7 @@ typedef struct VkExecutionGraphPipelineScratchSizeAMDX {
 } VkExecutionGraphPipelineScratchSizeAMDX;
 
 typedef struct VkExecutionGraphPipelineCreateInfoAMDX {
-    VkStructureType                           sType;
+    VkStructureType                           sType = VK_STRUCTURE_TYPE_EXECUTION_GRAPH_PIPELINE_CREATE_INFO_AMDX;
     const void*                               pNext;
     VkPipelineCreateFlags                     flags;
     uint32_t                                  stageCount;
@@ -114,7 +114,7 @@ typedef struct VkDispatchGraphCountInfoAMDX {
 } VkDispatchGraphCountInfoAMDX;
 
 typedef struct VkPipelineShaderStageNodeCreateInfoAMDX {
-      VkStructureType    sType;
+      VkStructureType    sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_NODE_CREATE_INFO_AMDX;
     const void*          pNext;
     const char*          pName;
     uint32_t             index;
@@ -186,19 +186,19 @@ typedef enum VkDisplacementMicromapFormatNV {
     VK_DISPLACEMENT_MICROMAP_FORMAT_MAX_ENUM_NV = 0x7FFFFFFF
 } VkDisplacementMicromapFormatNV;
 typedef struct VkPhysicalDeviceDisplacementMicromapFeaturesNV {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISPLACEMENT_MICROMAP_FEATURES_NV;
     void*              pNext;
     VkBool32           displacementMicromap;
 } VkPhysicalDeviceDisplacementMicromapFeaturesNV;
 
 typedef struct VkPhysicalDeviceDisplacementMicromapPropertiesNV {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISPLACEMENT_MICROMAP_PROPERTIES_NV;
     void*              pNext;
     uint32_t           maxDisplacementMicromapSubdivisionLevel;
 } VkPhysicalDeviceDisplacementMicromapPropertiesNV;
 
 typedef struct VkAccelerationStructureTrianglesDisplacementMicromapNV {
-    VkStructureType                     sType;
+    VkStructureType                     sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_TRIANGLES_DISPLACEMENT_MICROMAP_NV;
     void*                               pNext;
     VkFormat                            displacementBiasAndScaleFormat;
     VkFormat                            displacementVectorFormat;

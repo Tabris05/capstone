@@ -25,7 +25,7 @@ extern "C" {
 #define VK_QNX_SCREEN_SURFACE_EXTENSION_NAME "VK_QNX_screen_surface"
 typedef VkFlags VkScreenSurfaceCreateFlagsQNX;
 typedef struct VkScreenSurfaceCreateInfoQNX {
-    VkStructureType                  sType;
+    VkStructureType                  sType = VK_STRUCTURE_TYPE_SCREEN_SURFACE_CREATE_INFO_QNX;
     const void*                      pNext;
     VkScreenSurfaceCreateFlagsQNX    flags;
     struct _screen_context*          context;
@@ -54,14 +54,14 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceScreenPresentationSupportQNX(
 #define VK_QNX_EXTERNAL_MEMORY_SCREEN_BUFFER_SPEC_VERSION 1
 #define VK_QNX_EXTERNAL_MEMORY_SCREEN_BUFFER_EXTENSION_NAME "VK_QNX_external_memory_screen_buffer"
 typedef struct VkScreenBufferPropertiesQNX {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_SCREEN_BUFFER_PROPERTIES_QNX;
     void*              pNext;
     VkDeviceSize       allocationSize;
     uint32_t           memoryTypeBits;
 } VkScreenBufferPropertiesQNX;
 
 typedef struct VkScreenBufferFormatPropertiesQNX {
-    VkStructureType                  sType;
+    VkStructureType                  sType = VK_STRUCTURE_TYPE_SCREEN_BUFFER_FORMAT_PROPERTIES_QNX;
     void*                            pNext;
     VkFormat                         format;
     uint64_t                         externalFormat;
@@ -75,19 +75,19 @@ typedef struct VkScreenBufferFormatPropertiesQNX {
 } VkScreenBufferFormatPropertiesQNX;
 
 typedef struct VkImportScreenBufferInfoQNX {
-    VkStructureType           sType;
+    VkStructureType           sType = VK_STRUCTURE_TYPE_IMPORT_SCREEN_BUFFER_INFO_QNX;
     const void*               pNext;
     struct _screen_buffer*    buffer;
 } VkImportScreenBufferInfoQNX;
 
 typedef struct VkExternalFormatQNX {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_EXTERNAL_FORMAT_QNX;
     void*              pNext;
     uint64_t           externalFormat;
 } VkExternalFormatQNX;
 
 typedef struct VkPhysicalDeviceExternalMemoryScreenBufferFeaturesQNX {
-    VkStructureType    sType;
+    VkStructureType    sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_SCREEN_BUFFER_FEATURES_QNX;
     void*              pNext;
     VkBool32           screenBufferImport;
 } VkPhysicalDeviceExternalMemoryScreenBufferFeaturesQNX;

@@ -25,7 +25,7 @@ extern "C" {
 #define VK_NN_VI_SURFACE_EXTENSION_NAME   "VK_NN_vi_surface"
 typedef VkFlags VkViSurfaceCreateFlagsNN;
 typedef struct VkViSurfaceCreateInfoNN {
-    VkStructureType             sType;
+    VkStructureType             sType = VK_STRUCTURE_TYPE_VI_SURFACE_CREATE_INFO_NN;
     const void*                 pNext;
     VkViSurfaceCreateFlagsNN    flags;
     void*                       window;
