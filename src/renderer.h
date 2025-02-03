@@ -22,6 +22,7 @@ class Renderer {
 
 	private:
 		static constexpr u8 m_framesInFlight = 2;
+		static constexpr VkFormat m_colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
 
 		struct {
 			VkCommandPool cmdPool;
@@ -30,6 +31,12 @@ class Renderer {
 			VkSemaphore presentSem;
 			VkFence fence;
 		} m_perFrameData[m_framesInFlight];
+
+		struct Image {
+			VkImage image;
+			VkImageView view;
+			VkDeviceMemory memory;
+		};
 
 		i32 m_width;
 		i32 m_height;
@@ -47,8 +54,13 @@ class Renderer {
 		VkSurfaceFormatKHR m_surfaceFormat;
 		VkSwapchainKHR m_swapchain;
 		std::vector<VkImage> m_swapchainImages;
+		VkPipelineLayout m_pipelineLayout;
+		VkPipeline m_pipeline;
+		Image m_colorTarget;
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
+		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);
+		std::vector<u32> getShaderSource(const char* path);
 		void createSwapchain();
 };
 
