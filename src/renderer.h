@@ -43,6 +43,7 @@ class Renderer {
 		GLFWwindow* m_window;
 
 		u8 m_frameIndex = 0;
+		b8 m_swapchainDirty = false;
 
 		VkInstance m_instance;
 		VkPhysicalDevice m_physicalDevice;
@@ -62,6 +63,7 @@ class Renderer {
 		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);
 		std::vector<u32> getShaderSource(const char* path);
 		void createSwapchain();
+		void recreateSwapchain();
 };
 
 #endif

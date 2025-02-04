@@ -177,7 +177,11 @@ void Renderer::run() {
 		vkWaitForFences(m_device, 1, &frameData.fence, true, std::numeric_limits<u64>::max());
 
 		u32 imageIndex;
-		vkAcquireNextImageKHR(m_device, m_swapchain, std::numeric_limits<u64>::max(), frameData.acquireSem, nullptr, &imageIndex);
+		VkResult result = vkAcquireNextImageKHR(m_device, m_swapchain, std::numeric_limits<u64>::max(), frameData.acquireSem, nullptr, &imageIndex);
+		if(result == VK_ERROR_OUT_OF_DATE_KHR) {
+			recreateSwapchain();
+			continue;
+		}
 
 		vkResetFences(m_device, 1, &frameData.fence);
 		vkResetCommandPool(m_device, frameData.cmdPool, 0);
@@ -285,7 +289,7 @@ void Renderer::run() {
 			.pSignalSemaphores = &frameData.presentSem
 		}), frameData.fence);
 
-		vkQueuePresentKHR(m_graphicsQueue, ptr(VkPresentInfoKHR{
+		result = vkQueuePresentKHR(m_graphicsQueue, ptr(VkPresentInfoKHR{
 			.waitSemaphoreCount = 1,
 			.pWaitSemaphores = &frameData.presentSem,
 			.swapchainCount = 1,
@@ -293,12 +297,16 @@ void Renderer::run() {
 			.pImageIndices = &imageIndex
 		}));
 
+		if(result != VK_SUCCESS || m_swapchainDirty) {
+			recreateSwapchain();
+		}
+
 		m_frameIndex = (m_frameIndex + 1) % m_framesInFlight;
 	}
 }
 
 void Renderer::onResize() {
-
+	m_swapchainDirty = true;
 }
 
 u32 Renderer::getQueue(VkQueueFlags include, VkQueueFlags exclude) {
@@ -387,4 +395,20 @@ void Renderer::createSwapchain() {
 		.format = m_colorFormat,
 		.subresourceRange = colorSubresourceRange()
 	}), nullptr, &m_colorTarget.view);
+}
+
+void Renderer::recreateSwapchain() {
+	glfwGetFramebufferSize(m_window, &m_width, &m_height);
+	while(m_width == 0 || m_height == 0) {
+		glfwGetFramebufferSize(m_window, &m_width, &m_height);
+		glfwWaitEvents();
+	}
+
+	vkDeviceWaitIdle(m_device);
+	vkDestroyImageView(m_device, m_colorTarget.view, nullptr);
+	vkDestroyImage(m_device, m_colorTarget.image, nullptr);
+	vkFreeMemory(m_device, m_colorTarget.memory, nullptr);
+
+	createSwapchain();
+	m_swapchainDirty = false;
 }
