@@ -4,6 +4,7 @@
 #include <tbrs/types.hpp>
 #include <volk/volk.h>
 #include <glfw/glfw3.h>
+#include <glm/glm.hpp>
 #include <vector>
 
 class Renderer {
@@ -24,6 +25,25 @@ class Renderer {
 		static constexpr u8 m_framesInFlight = 2;
 		static constexpr VkFormat m_colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
 
+		struct Buffer {
+			VkDeviceMemory memory;
+			VkBuffer buffer;
+			union {
+				std::byte* hostPtr;
+				VkDeviceAddress devicePtr;
+			};
+		};
+
+		struct Image {
+			VkDeviceMemory memory;
+			VkImage image;
+			VkImageView view;
+		};
+
+		struct PushConstants {
+			glm::mat4 transform;
+		};
+
 		struct {
 			VkCommandPool cmdPool;
 			VkCommandBuffer cmdBuffer;
@@ -32,11 +52,6 @@ class Renderer {
 			VkFence fence;
 		} m_perFrameData[m_framesInFlight];
 
-		struct Image {
-			VkImage image;
-			VkImageView view;
-			VkDeviceMemory memory;
-		};
 
 		i32 m_width;
 		i32 m_height;
@@ -58,6 +73,9 @@ class Renderer {
 		VkPipelineLayout m_pipelineLayout;
 		VkPipeline m_pipeline;
 		Image m_colorTarget;
+
+		f32 m_fov = 90.0f;
+		glm::vec3 m_position = { 0.0f, 0.0f, -2.0f };
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
 		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);

@@ -1,5 +1,6 @@
 #include "renderer.h"
 #include <tbrs/vk_util.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <ranges>
 #include <fstream>
 
@@ -86,7 +87,14 @@ Renderer::Renderer() {
 		std::vector<u32> vsSrc = getShaderSource("shaders/tri.vert.spv");
 		std::vector<u32> fsSrc = getShaderSource("shaders/tri.frag.spv");
 
-		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{}), nullptr, &m_pipelineLayout);
+		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = ptr(VkPushConstantRange{
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+				.offset = 0,
+				.size = sizeof(PushConstants)
+			})
+		}), nullptr, &m_pipelineLayout);
 		vkCreateGraphicsPipelines(m_device, nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
 			.pNext = ptr(VkPipelineRenderingCreateInfo{
 				.colorAttachmentCount = 1,
@@ -114,7 +122,7 @@ Renderer::Renderer() {
 			.pVertexInputState = ptr(VkPipelineVertexInputStateCreateInfo{}),
 			.pInputAssemblyState = ptr(VkPipelineInputAssemblyStateCreateInfo{ .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST }),
 			.pViewportState = ptr(VkPipelineViewportStateCreateInfo{ .viewportCount = 1, .scissorCount = 1 }),
-			.pRasterizationState = ptr(VkPipelineRasterizationStateCreateInfo{ .cullMode = VK_CULL_MODE_BACK_BIT, .lineWidth = 1.0f }),
+			.pRasterizationState = ptr(VkPipelineRasterizationStateCreateInfo{ .cullMode = VK_CULL_MODE_NONE, .lineWidth = 1.0f }),
 			.pMultisampleState = ptr(VkPipelineMultisampleStateCreateInfo{ .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT }),
 			.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{}),
 			.pColorBlendState = ptr(VkPipelineColorBlendStateCreateInfo{ .attachmentCount = 1, .pAttachments = ptr(VkPipelineColorBlendAttachmentState{ .colorWriteMask = colorComponentAll() })}),
@@ -173,6 +181,10 @@ void Renderer::run() {
 	while(!glfwWindowShouldClose(m_window)) {
 		glfwPollEvents();
 
+		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 projection = glm::infinitePerspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
+
 		auto frameData = m_perFrameData[m_frameIndex];
 		vkWaitForFences(m_device, 1, &frameData.fence, true, std::numeric_limits<u64>::max());
 
@@ -218,6 +230,7 @@ void Renderer::run() {
 		vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
 		vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+		vkCmdPushConstants(frameData.cmdBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), ptr(projection * view * model));
 		vkCmdDraw(frameData.cmdBuffer, 3, 1, 0, 0);
 
 		vkCmdEndRendering(frameData.cmdBuffer);
