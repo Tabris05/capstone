@@ -108,7 +108,8 @@ Renderer::Renderer() {
 		vkCreateGraphicsPipelines(m_device, nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
 			.pNext = ptr(VkPipelineRenderingCreateInfo{
 				.colorAttachmentCount = 1,
-				.pColorAttachmentFormats = &m_colorFormat
+				.pColorAttachmentFormats = &m_colorFormat,
+				.depthAttachmentFormat = m_depthFormat
 			}),
 			.stageCount = 2,
 			.pStages = ptr({
@@ -134,7 +135,7 @@ Renderer::Renderer() {
 			.pViewportState = ptr(VkPipelineViewportStateCreateInfo{ .viewportCount = 1, .scissorCount = 1 }),
 			.pRasterizationState = ptr(VkPipelineRasterizationStateCreateInfo{ .cullMode = VK_CULL_MODE_NONE, .lineWidth = 1.0f }),
 			.pMultisampleState = ptr(VkPipelineMultisampleStateCreateInfo{ .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT }),
-			.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{}),
+			.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = VK_COMPARE_OP_GREATER }),
 			.pColorBlendState = ptr(VkPipelineColorBlendStateCreateInfo{ .attachmentCount = 1, .pAttachments = ptr(VkPipelineColorBlendAttachmentState{ .colorWriteMask = colorComponentAll() })}),
 			.pDynamicState = ptr(VkPipelineDynamicStateCreateInfo{ .dynamicStateCount = 2, .pDynamicStates = ptr({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }) }),
 			.layout = m_pipelineLayout
@@ -144,14 +145,25 @@ Renderer::Renderer() {
 	// Vertex Buffer
 	{
 		Vertex vertices[] = {
-			{ glm::vec3( 0.0f, -0.5f,  0.0f), glm::vec3(1.0f, 0.0f, 0.0f) },
-			{ glm::vec3(-0.5f,  0.5f,  0.0f), glm::vec3(0.0f, 1.0f, 0.0f) },
-			{ glm::vec3( 0.5f,  0.5f,  0.0f), glm::vec3(0.0f, 0.0f, 1.0f) },
+			{ glm::vec3(-0.5f,  0.5f, -0.5f), glm::vec3(0.0f, 0.0f, 0.0f) },
+			{ glm::vec3(-0.5f,  0.5f,  0.5f), glm::vec3(0.0f, 0.0f, 1.0f) },
+			{ glm::vec3(-0.5f, -0.5f, -0.5f), glm::vec3(0.0f, 1.0f, 0.0f) },
+			{ glm::vec3(-0.5f, -0.5f,  0.5f), glm::vec3(0.0f, 1.0f, 1.0f) },
+			{ glm::vec3( 0.5f,  0.5f, -0.5f), glm::vec3(1.0f, 0.0f, 0.0f) },
+			{ glm::vec3( 0.5f,  0.5f,  0.5f), glm::vec3(1.0f, 0.0f, 1.0f) },
+			{ glm::vec3( 0.5f, -0.5f, -0.5f), glm::vec3(1.0f, 1.0f, 0.0f) },
+			{ glm::vec3( 0.5f, -0.5f,  0.5f), glm::vec3(1.0f, 1.0f, 1.0f) },
 		};
 
-		Buffer stagingBuffer = createBuffer(sizeof(vertices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		u16 indices[] = { 0, 3, 1, 0, 2, 3, 5, 0, 1, 5, 4, 0, 4, 2, 0, 4, 6, 2, 5, 6, 4, 5, 7, 6, 6, 3, 2, 6, 7, 3, 1, 7, 5, 1, 3, 7 };
+
+		Buffer stageVB = createBuffer(sizeof(vertices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		Buffer stageIB = createBuffer(sizeof(indices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 		m_vertexBuffer = createBuffer(sizeof(vertices), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		memcpy(stagingBuffer.hostPtr, vertices, sizeof(vertices));
+		m_indexBuffer = createBuffer(sizeof(indices), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		memcpy(stageVB.hostPtr, vertices, sizeof(vertices));
+		memcpy(stageIB.hostPtr, indices, sizeof(indices));
 
 		VkCommandPool stagingPool;
 		VkCommandBuffer stagingCmd;
@@ -166,7 +178,8 @@ Renderer::Renderer() {
 		}), &stagingCmd);
 
 		vkBeginCommandBuffer(stagingCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
-		vkCmdCopyBuffer(stagingCmd, stagingBuffer.buffer, m_vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = sizeof(vertices) }));
+		vkCmdCopyBuffer(stagingCmd, stageVB.buffer, m_vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = sizeof(vertices) }));
+		vkCmdCopyBuffer(stagingCmd, stageIB.buffer, m_indexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = sizeof(indices) }));
 		vkEndCommandBuffer(stagingCmd);
 
 		vkQueueSubmit(m_transferQueue, 1, ptr(VkSubmitInfo{
@@ -175,7 +188,11 @@ Renderer::Renderer() {
 		}), nullptr);
 
 		vkQueueWaitIdle(m_transferQueue);
-		destroyBuffer(stagingBuffer);
+		
+		destroyBuffer(stageVB);
+		destroyBuffer(stageIB);
+
+		vkDestroyCommandPool(m_device, stagingPool, nullptr);
 	}
 
 	// per-frame data (vk::CommandPool, vk::CommandBuffer, vk::Semaphores, vk::Fence)
@@ -208,14 +225,14 @@ Renderer::~Renderer() {
 	}
 
 	destroyBuffer(m_vertexBuffer);
+	destroyBuffer(m_indexBuffer);
 
 	vkDestroyPipeline(m_device, m_pipeline, nullptr);
 	vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
 
-	vkDestroyImageView(m_device, m_colorTarget.view, nullptr);
-	vkDestroyImage(m_device, m_colorTarget.image, nullptr);
-	vkFreeMemory(m_device, m_colorTarget.memory, nullptr);
-
+	destroyImage(m_colorTarget);
+	destroyImage(m_depthTarget);
+	
 	vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
 	vkDestroyDevice(m_device, nullptr);
 
@@ -233,6 +250,8 @@ void Renderer::run() {
 		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 projection = glm::infinitePerspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
+		projection[2][2] = 0.0f;
+		projection[3][2] = 0.1f;
 
 		PushConstants pushConstants{ m_vertexBuffer.devicePtr, projection * view * model };
 
@@ -252,16 +271,28 @@ void Renderer::run() {
 		vkBeginCommandBuffer(frameData.cmdBuffer, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 
 		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-			.imageMemoryBarrierCount = 1,
-			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-				.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-				.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-				.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-				.image = m_colorTarget.image,
-				.subresourceRange = colorSubresourceRange()
+			.imageMemoryBarrierCount = 2,
+			.pImageMemoryBarriers = ptr({
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+					.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+					.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+					.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+					.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+					.image = m_colorTarget.image,
+					.subresourceRange = colorSubresourceRange()
+				},
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+					.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+					.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+					.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+					.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+					.image = m_depthTarget.image,
+					.subresourceRange = depthSubresourceRange()
+				},
 			})
 		}));
 
@@ -275,14 +306,22 @@ void Renderer::run() {
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 				.clearValue = { 0.0f, 0.0f, 0.0f, 1.0f }
+			}),
+			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
+				.imageView = m_depthTarget.view,
+				.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.clearValue = { 0.0f }
 			})
 		}));
 
 		vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
 		vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+		vkCmdBindIndexBuffer(frameData.cmdBuffer, m_indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 		vkCmdPushConstants(frameData.cmdBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
-		vkCmdDraw(frameData.cmdBuffer, 3, 1, 0, 0);
+		vkCmdDrawIndexed(frameData.cmdBuffer, 36, 1, 0, 0, 0);
 
 		vkCmdEndRendering(frameData.cmdBuffer);
 
@@ -431,34 +470,8 @@ void Renderer::createSwapchain() {
 	m_swapchainImages.resize(numSwapchainImages);
 	vkGetSwapchainImagesKHR(m_device, m_swapchain, &numSwapchainImages, m_swapchainImages.data());
 
-	vkCreateImage(m_device, ptr(VkImageCreateInfo{
-		.imageType = VK_IMAGE_TYPE_2D,
-		.format = m_colorFormat,
-		.extent = { static_cast<u32>(m_width), static_cast<u32>(m_height), 1 },
-		.mipLevels = 1,
-		.arrayLayers = 1,
-		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.tiling = VK_IMAGE_TILING_OPTIMAL,
-		.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-		.queueFamilyIndexCount = 1,
-		.pQueueFamilyIndices = &m_graphicsQueueFamily
-	}), nullptr, &m_colorTarget.image);
-
-	VkMemoryRequirements mrq;
-	vkGetImageMemoryRequirements(m_device, m_colorTarget.image, &mrq);
-	vkAllocateMemory(m_device, ptr(VkMemoryAllocateInfo{
-		.allocationSize = mrq.size,
-		.memoryTypeIndex = getMemoryIndex(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mrq.memoryTypeBits)
-	}), nullptr, &m_colorTarget.memory);
-	vkBindImageMemory(m_device, m_colorTarget.image, m_colorTarget.memory, 0);
-
-	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
-		.image = m_colorTarget.image,
-		.viewType = VK_IMAGE_VIEW_TYPE_2D,
-		.format = m_colorFormat,
-		.subresourceRange = colorSubresourceRange()
-	}), nullptr, &m_colorTarget.view);
+	m_colorTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+	m_depthTarget = createImage(m_width, m_height, m_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 }
 
 void Renderer::recreateSwapchain() {
@@ -469,12 +482,51 @@ void Renderer::recreateSwapchain() {
 	}
 
 	vkDeviceWaitIdle(m_device);
-	vkDestroyImageView(m_device, m_colorTarget.view, nullptr);
-	vkDestroyImage(m_device, m_colorTarget.image, nullptr);
-	vkFreeMemory(m_device, m_colorTarget.memory, nullptr);
+	destroyImage(m_colorTarget);
+	destroyImage(m_depthTarget);
 
 	createSwapchain();
 	m_swapchainDirty = false;
+}
+
+Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage) {
+	Image image;
+	vkCreateImage(m_device, ptr(VkImageCreateInfo{
+		.imageType = VK_IMAGE_TYPE_2D,
+		.format = format,
+		.extent = { width, height, 1 },
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.usage = usage,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.queueFamilyIndexCount = 1,
+		.pQueueFamilyIndices = &m_graphicsQueueFamily
+	}), nullptr, &image.image);
+
+	VkMemoryRequirements mrq;
+	vkGetImageMemoryRequirements(m_device, image.image, &mrq);
+	vkAllocateMemory(m_device, ptr(VkMemoryAllocateInfo{
+		.allocationSize = mrq.size,
+		.memoryTypeIndex = getMemoryIndex(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mrq.memoryTypeBits)
+	}), nullptr, &image.memory);
+	vkBindImageMemory(m_device, image.image, image.memory, 0);
+
+	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		.image = image.image,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.format = format,
+		.subresourceRange = (format < 124 || format > 130) ? colorSubresourceRange() : depthSubresourceRange()
+	}), nullptr, &image.view);
+
+	return image;
+}
+
+void Renderer::destroyImage(Image image) {
+	vkDestroyImageView(m_device, image.view, nullptr);
+	vkDestroyImage(m_device, image.image, nullptr);
+	vkFreeMemory(m_device, image.memory, nullptr);
 }
 
 Renderer::Buffer Renderer::createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps) {

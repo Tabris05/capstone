@@ -24,6 +24,13 @@ class Renderer {
 	private:
 		static constexpr u8 m_framesInFlight = 2;
 		static constexpr VkFormat m_colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
+		static constexpr VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
+
+		struct Image {
+			VkDeviceMemory memory;
+			VkImage image;
+			VkImageView view;
+		};
 
 		struct Buffer {
 			VkDeviceMemory memory;
@@ -32,12 +39,6 @@ class Renderer {
 				void* hostPtr;
 				VkDeviceAddress devicePtr;
 			};
-		};
-
-		struct Image {
-			VkDeviceMemory memory;
-			VkImage image;
-			VkImageView view;
 		};
 
 		struct PushConstants {
@@ -76,7 +77,9 @@ class Renderer {
 		VkPipelineLayout m_pipelineLayout;
 		VkPipeline m_pipeline;
 		Image m_colorTarget;
+		Image m_depthTarget;
 		Buffer m_vertexBuffer;
+		Buffer m_indexBuffer;
 
 		f32 m_fov = 90.0f;
 		glm::vec3 m_position = { 0.0f, 0.0f, -2.0f };
@@ -86,6 +89,9 @@ class Renderer {
 		std::vector<u32> getShaderSource(const char* path);
 		void createSwapchain();
 		void recreateSwapchain();
+
+		Image createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage);
+		void destroyImage(Image image);
 
 		Buffer createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps);
 		void destroyBuffer(Buffer buffer);
