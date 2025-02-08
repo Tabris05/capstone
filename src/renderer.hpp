@@ -1,5 +1,5 @@
-#ifndef RENDERER_H
-#define RENDERER_H
+#ifndef RENDERER_HPP
+#define RENDERER_HPP
 
 #include <tbrs/types.hpp>
 #include <volk/volk.h>
@@ -29,7 +29,7 @@ class Renderer {
 			VkDeviceMemory memory;
 			VkBuffer buffer;
 			union {
-				std::byte* hostPtr;
+				void* hostPtr;
 				VkDeviceAddress devicePtr;
 			};
 		};
@@ -41,6 +41,7 @@ class Renderer {
 		};
 
 		struct PushConstants {
+			VkDeviceAddress vertexBuffer;
 			glm::mat4 transform;
 		};
 
@@ -65,6 +66,8 @@ class Renderer {
 		VkPhysicalDeviceMemoryProperties m_memProps;
 		u32 m_graphicsQueueFamily;
 		VkQueue m_graphicsQueue;
+		u32 m_transferQueueFamily;
+		VkQueue m_transferQueue;
 		VkDevice m_device;
 		VkSurfaceKHR m_surface;
 		VkSurfaceFormatKHR m_surfaceFormat;
@@ -73,6 +76,7 @@ class Renderer {
 		VkPipelineLayout m_pipelineLayout;
 		VkPipeline m_pipeline;
 		Image m_colorTarget;
+		Buffer m_vertexBuffer;
 
 		f32 m_fov = 90.0f;
 		glm::vec3 m_position = { 0.0f, 0.0f, -2.0f };
@@ -82,6 +86,9 @@ class Renderer {
 		std::vector<u32> getShaderSource(const char* path);
 		void createSwapchain();
 		void recreateSwapchain();
+
+		Buffer createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps);
+		void destroyBuffer(Buffer buffer);
 };
 
 #endif

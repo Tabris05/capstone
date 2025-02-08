@@ -16,6 +16,9 @@
     <Filter Include="Source Files\Dependencies">
       <UniqueIdentifier>{a4855074-9786-4a17-ad04-fbbdf5a8cf9d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Shared">
+      <UniqueIdentifier>{4d61035e-8ece-4bb1-b8b2-3d95e85aa0ee}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp">
@@ -29,8 +32,11 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\renderer.h">
+    <ClInclude Include="src\renderer.hpp">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shared\vertex.h">
+      <Filter>Header Files\Shared</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

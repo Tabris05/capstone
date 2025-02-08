@@ -1,8 +1,9 @@
-#include "renderer.h"
+#include "renderer.hpp"
 #include <tbrs/vk_util.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <ranges>
 #include <fstream>
+#include "../shared/vertex.h"
 
 Renderer::Renderer() {
 	// glfw
@@ -48,6 +49,7 @@ Renderer::Renderer() {
 	// VkDevice and VkQueues
 	{
 		m_graphicsQueueFamily = getQueue(VK_QUEUE_GRAPHICS_BIT);
+		m_transferQueueFamily = getQueue(VK_QUEUE_TRANSFER_BIT, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 		vkCreateDevice(m_physicalDevice, ptr(VkDeviceCreateInfo{
 			.pNext = ptr(VkPhysicalDeviceVulkan12Features{
 				.pNext = ptr(VkPhysicalDeviceVulkan13Features{
@@ -59,11 +61,18 @@ Renderer::Renderer() {
 				.scalarBlockLayout = true,
 				.bufferDeviceAddress = true
 			}),
-			.queueCreateInfoCount = 1,
-			.pQueueCreateInfos = ptr(VkDeviceQueueCreateInfo{
-				.queueFamilyIndex = m_graphicsQueueFamily,
-				.queueCount = 1,
-				.pQueuePriorities = ptr(1.0f)
+			.queueCreateInfoCount = 2,
+			.pQueueCreateInfos = ptr({
+				VkDeviceQueueCreateInfo{
+					.queueFamilyIndex = m_graphicsQueueFamily,
+					.queueCount = 1,
+					.pQueuePriorities = ptr(1.0f)
+				},
+				VkDeviceQueueCreateInfo{
+					.queueFamilyIndex = m_transferQueueFamily,
+					.queueCount = 1,
+					.pQueuePriorities = ptr(1.0f)
+				}
 			}),
 			.enabledExtensionCount = 1,
 			.ppEnabledExtensionNames = ptr<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME)
@@ -71,6 +80,7 @@ Renderer::Renderer() {
 
 		volkLoadDevice(m_device);
 		vkGetDeviceQueue(m_device, m_graphicsQueueFamily, 0, &m_graphicsQueue);
+		vkGetDeviceQueue(m_device, m_transferQueueFamily, 0, &m_transferQueue);
 	}
 
 	// VkSurface and VkSwapchain
@@ -131,6 +141,43 @@ Renderer::Renderer() {
 		}), nullptr, &m_pipeline);
 	}
 
+	// Vertex Buffer
+	{
+		Vertex vertices[] = {
+			{ glm::vec3( 0.0f, -0.5f,  0.0f), glm::vec3(1.0f, 0.0f, 0.0f) },
+			{ glm::vec3(-0.5f,  0.5f,  0.0f), glm::vec3(0.0f, 1.0f, 0.0f) },
+			{ glm::vec3( 0.5f,  0.5f,  0.0f), glm::vec3(0.0f, 0.0f, 1.0f) },
+		};
+
+		Buffer stagingBuffer = createBuffer(sizeof(vertices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		m_vertexBuffer = createBuffer(sizeof(vertices), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		memcpy(stagingBuffer.hostPtr, vertices, sizeof(vertices));
+
+		VkCommandPool stagingPool;
+		VkCommandBuffer stagingCmd;
+		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+			.queueFamilyIndex = m_transferQueueFamily
+		}), nullptr, &stagingPool);
+		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+			.commandPool = stagingPool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		}), &stagingCmd);
+
+		vkBeginCommandBuffer(stagingCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+		vkCmdCopyBuffer(stagingCmd, stagingBuffer.buffer, m_vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = sizeof(vertices) }));
+		vkEndCommandBuffer(stagingCmd);
+
+		vkQueueSubmit(m_transferQueue, 1, ptr(VkSubmitInfo{
+			.commandBufferCount = 1,
+			.pCommandBuffers = &stagingCmd
+		}), nullptr);
+
+		vkQueueWaitIdle(m_transferQueue);
+		destroyBuffer(stagingBuffer);
+	}
+
 	// per-frame data (vk::CommandPool, vk::CommandBuffer, vk::Semaphores, vk::Fence)
 	{
 		for(u8 i = 0; i < m_framesInFlight; i++) {
@@ -160,6 +207,8 @@ Renderer::~Renderer() {
 		vkDestroyFence(m_device, m_perFrameData[i].fence, nullptr);
 	}
 
+	destroyBuffer(m_vertexBuffer);
+
 	vkDestroyPipeline(m_device, m_pipeline, nullptr);
 	vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
 
@@ -184,6 +233,8 @@ void Renderer::run() {
 		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 projection = glm::infinitePerspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
+
+		PushConstants pushConstants{ m_vertexBuffer.devicePtr, projection * view * model };
 
 		auto frameData = m_perFrameData[m_frameIndex];
 		vkWaitForFences(m_device, 1, &frameData.fence, true, std::numeric_limits<u64>::max());
@@ -230,7 +281,7 @@ void Renderer::run() {
 		vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
 		vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
-		vkCmdPushConstants(frameData.cmdBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), ptr(projection * view * model));
+		vkCmdPushConstants(frameData.cmdBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
 		vkCmdDraw(frameData.cmdBuffer, 3, 1, 0, 0);
 
 		vkCmdEndRendering(frameData.cmdBuffer);
@@ -424,4 +475,40 @@ void Renderer::recreateSwapchain() {
 
 	createSwapchain();
 	m_swapchainDirty = false;
+}
+
+Renderer::Buffer Renderer::createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps) {
+	Buffer buffer;
+	vkCreateBuffer(m_device, ptr(VkBufferCreateInfo{
+		.size = size,
+		.usage = usage,
+		.sharingMode = VK_SHARING_MODE_CONCURRENT,
+		.queueFamilyIndexCount = 2,
+		.pQueueFamilyIndices = ptr({ m_graphicsQueueFamily, m_transferQueueFamily })
+		}), nullptr, &buffer.buffer);
+
+	VkMemoryRequirements mrq;
+	vkGetBufferMemoryRequirements(m_device, buffer.buffer, &mrq);
+	vkAllocateMemory(m_device, ptr(VkMemoryAllocateInfo{
+		.pNext = (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) ? ptr(VkMemoryAllocateFlagsInfo{ .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT }) : nullptr,
+		.allocationSize = mrq.size,
+		.memoryTypeIndex = getMemoryIndex(memProps, mrq.memoryTypeBits)
+		}), nullptr, &buffer.memory);
+	vkBindBufferMemory(m_device, buffer.buffer, buffer.memory, 0);
+
+	if (memProps & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+		vkMapMemory(m_device, buffer.memory, 0, VK_WHOLE_SIZE, 0, &buffer.hostPtr);
+	}
+	else if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+		buffer.devicePtr = vkGetBufferDeviceAddress(m_device, ptr(VkBufferDeviceAddressInfo{
+			.buffer = buffer.buffer
+		}));
+	}
+
+	return buffer;
+}
+
+void Renderer::destroyBuffer(Buffer buffer) {
+	vkDestroyBuffer(m_device, buffer.buffer, nullptr);
+	vkFreeMemory(m_device, buffer.memory, nullptr);
 }

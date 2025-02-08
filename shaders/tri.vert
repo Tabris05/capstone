@@ -1,26 +1,23 @@
 #version 460
-#extension GL_EXT_buffer_reference : require
+
+#extension GL_EXT_buffer_reference2 : require
 #extension GL_EXT_scalar_block_layout : require
+
+#include "../shared/vertex.h"
 
 layout(location = 0) out vec3 outColor;
 
-vec3 positions[3] = {
-    {  0.5f,  0.5f,  0.0f },
-    {  0.0f, -0.5f,  0.0f },
-    { -0.5f,  0.5f,  0.0f }
-};
-
-vec3 colors[3] = {
-    { 1.0f, 0.0f, 0.0f },
-    { 0.0f, 1.0f, 0.0f },
-    { 0.0f, 0.0f, 1.0f }
+layout(buffer_reference, scalar) buffer VertexBuffer {
+    Vertex vertices[];
 };
 
 layout(push_constant, scalar) uniform constants {
+    VertexBuffer vertexBuffer;
     mat4 transform;
 } pcs;
 
 void main() {
-    gl_Position = pcs.transform * vec4(positions[gl_VertexIndex], 1.0f);
-    outColor = colors[gl_VertexIndex];
+    Vertex v = pcs.vertexBuffer.vertices[gl_VertexIndex];
+    gl_Position = pcs.transform * vec4(v.position, 1.0f);
+    outColor = v.color;
 }
