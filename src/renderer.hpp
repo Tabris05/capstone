@@ -6,6 +6,8 @@
 #include <glfw/glfw3.h>
 #include <glm/glm.hpp>
 #include <vector>
+#include <filesystem>
+#include <limits>
 
 class Renderer {
 	public:
@@ -26,24 +28,39 @@ class Renderer {
 		static constexpr VkFormat m_colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
 		static constexpr VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
 
+		struct AABB {
+			glm::vec3 min{ std::numeric_limits<f32>::infinity() };
+			glm::vec3 max{ -std::numeric_limits<f32>::infinity() };
+		};
+
 		struct Image {
-			VkDeviceMemory memory;
-			VkImage image;
-			VkImageView view;
+			VkDeviceMemory memory = nullptr;
+			VkImage image = nullptr;
+			VkImageView view = nullptr;
 		};
 
 		struct Buffer {
-			VkDeviceMemory memory;
-			VkBuffer buffer;
+			VkDeviceMemory memory = nullptr;
+			VkBuffer buffer = nullptr;
 			union {
-				void* hostPtr;
+				void* hostPtr = nullptr;
 				VkDeviceAddress devicePtr;
 			};
+		};
+
+		struct Model {
+			Buffer vertexBuffer;
+			Buffer indexBuffer;
+			Buffer indirectBuffer;
+			glm::mat4 baseTransform;
+			AABB aabb;
+			u64 numDrawCommands;
 		};
 
 		struct PushConstants {
 			VkDeviceAddress vertexBuffer;
 			glm::mat4 transform;
+			glm::mat3 normalTransform;
 		};
 
 		struct {
@@ -78,11 +95,10 @@ class Renderer {
 		VkPipeline m_pipeline;
 		Image m_colorTarget;
 		Image m_depthTarget;
-		Buffer m_vertexBuffer;
-		Buffer m_indexBuffer;
+		Model m_model;
 
 		f32 m_fov = 90.0f;
-		glm::vec3 m_position = { 0.0f, 0.0f, -2.0f };
+		glm::vec3 m_position{ 0.0f, -0.5f, -2.0f };
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
 		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);
@@ -95,6 +111,9 @@ class Renderer {
 
 		Buffer createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps);
 		void destroyBuffer(Buffer buffer);
+
+		void createModel(std::filesystem::path path);
+		void destroyModel(Model model);
 };
 
 #endif

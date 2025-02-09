@@ -7,5 +7,7 @@
 
 struct Vertex {
     GLM vec3 position;
-    GLM vec3 color;
+    GLM vec3 normal;
+    GLM vec4 tangent;
+    GLM vec2 uv;
 };

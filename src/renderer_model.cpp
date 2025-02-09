@@ -1,0 +1,207 @@
+#include "renderer.hpp"
+#include "../shared/vertex.h"
+#include <fastgltf/core.hpp>
+#include <fastgltf/glm_element_traits.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <mikktspace/mikktspace.h>
+#include "tbrs/vk_util.hpp"
+
+void Renderer::createModel(std::filesystem::path path) {
+	const fastgltf::Extensions extensions =
+		fastgltf::Extensions::KHR_materials_emissive_strength;
+
+	fastgltf::Parser parser{ extensions };
+	fastgltf::GltfDataBuffer data = std::move(fastgltf::GltfDataBuffer::FromPath(path).get());
+
+	const fastgltf::Options options =
+		fastgltf::Options::GenerateMeshIndices |
+		fastgltf::Options::LoadExternalBuffers |
+		fastgltf::Options::LoadExternalImages;
+
+	const fastgltf::Asset asset{ std::move(parser.loadGltf(data, path.parent_path(), options).get()) };
+
+	std::vector<Vertex> vertices;
+	std::vector<u32> indices;
+	std::vector<VkDrawIndexedIndirectCommand> drawCmds;
+
+	AABB aabb;
+
+	u64 numVertices = 0;
+	u64 numIndices = 0;
+	u64 numPrimitives = 0;
+	for(const fastgltf::Mesh curMesh : asset.meshes) {
+		for(u64 i = 0; i < curMesh.primitives.size(); i++) {
+			numVertices += asset.accessors[curMesh.primitives[i].findAttribute("POSITION")->accessorIndex].count;
+			numIndices += asset.accessors[curMesh.primitives[i].indicesAccessor.value()].count;
+			numPrimitives++;
+		}
+	}
+
+	vertices.reserve(numVertices);
+	indices.reserve(numIndices);
+	drawCmds.reserve(numPrimitives);
+
+	auto processNode = [&](this auto& self, u64 index, glm::mat4 transform) -> void {
+		const fastgltf::Node& curNode = asset.nodes[index];
+		transform *= std::visit(fastgltf::visitor{
+			[](fastgltf::math::fmat4x4 matrix) {
+				return glm::make_mat4(matrix.data());
+			},
+			[](fastgltf::TRS trs) {
+				return glm::translate(glm::mat4{ 1.0f }, glm::make_vec3(trs.translation.data()))
+				* glm::toMat4(glm::make_quat(trs.rotation.value_ptr()))
+				* glm::scale(glm::mat4{ 1.0f }, glm::make_vec3(trs.scale.data()));
+			}
+		}, curNode.transform);
+
+		if(curNode.meshIndex.has_value()) {
+			const glm::mat3 normalTransform{ glm::transpose(glm::inverse(transform)) };
+			const fastgltf::Mesh& curMesh = asset.meshes[curNode.meshIndex.value()];
+			for(const fastgltf::Primitive& curPrimitive : curMesh.primitives) {
+				u64 oldVerticesSize = vertices.size();
+				u64 oldIndicesSize = indices.size();
+
+				const fastgltf::Accessor& indexAccessor = asset.accessors[curPrimitive.indicesAccessor.value()];
+				fastgltf::iterateAccessor<u32>(asset, indexAccessor, [&indices](u32 index) {
+					indices.emplace_back(index);
+				});
+
+				const fastgltf::Accessor& positionAccessor = asset.accessors[curPrimitive.findAttribute("POSITION")->accessorIndex];
+				fastgltf::iterateAccessor<glm::vec3>(asset, positionAccessor, [&vertices, &aabb, transform](glm::vec3 pos) {
+					glm::vec3 vertex = glm::vec3(transform * glm::vec4(pos, 1.0f));
+					aabb.min = glm::min(aabb.min, vertex);
+					aabb.max = glm::max(aabb.max, vertex);
+					vertices.emplace_back(vertex);
+				});
+
+				const fastgltf::Accessor& normalAccessor = asset.accessors[curPrimitive.findAttribute("NORMAL")->accessorIndex];
+				fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, normalAccessor, [&vertices, oldVerticesSize, normalTransform](glm::vec3 normal, u64 index) {
+					vertices[index + oldVerticesSize].normal = glm::normalize(normalTransform * normal);
+				});
+
+				const fastgltf::Attribute* uvAccessorIndex;
+				if((uvAccessorIndex = curPrimitive.findAttribute("TEXCOORD_0")) != curPrimitive.attributes.cend()) {
+					const fastgltf::Accessor& uvAccessor = asset.accessors[uvAccessorIndex->accessorIndex];
+					fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, uvAccessor, [&vertices, oldVerticesSize](glm::vec2 uv, u64 index) {
+						vertices[index + oldVerticesSize].uv = uv;
+					});
+				}
+
+				const fastgltf::Attribute* tangentAccessorIndex;
+				if((tangentAccessorIndex = curPrimitive.findAttribute("TANGENT")) != curPrimitive.attributes.cend()) {
+					const fastgltf::Accessor& tangentAccessor = asset.accessors[tangentAccessorIndex->accessorIndex];
+					fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, tangentAccessor, [&vertices, oldVerticesSize, transform](glm::vec4 tangent, u64 index) {
+						vertices[index + oldVerticesSize].tangent = glm::vec4(glm::normalize(glm::vec3(transform * glm::vec4(glm::vec3(tangent), 0.0f))), tangent.w);
+					});
+				}
+				else if(uvAccessorIndex != curPrimitive.attributes.cend()) {
+					struct UsrPtr {
+						u64 vertexOffset;
+						u64 indexOffset;
+						std::vector<Vertex>& vertices;
+						std::vector<u32>& indices;
+					} usrPtr{ oldVerticesSize, oldIndicesSize, vertices, indices };
+
+					SMikkTSpaceInterface interface {
+						[](const SMikkTSpaceContext* ctx) -> i32 {
+							UsrPtr* data = static_cast<UsrPtr*>(ctx->m_pUserData);
+								return (data->indices.size() - data->indexOffset) / 3;
+							},
+							[](const SMikkTSpaceContext*, const i32) -> i32 {
+								return 3;
+							},
+							[](const SMikkTSpaceContext* ctx, f32 outPos[], const i32 face, const i32 vert) {
+								UsrPtr* data = static_cast<UsrPtr*>(ctx->m_pUserData);
+								memcpy(outPos, &data->vertices[data->vertexOffset + data->indices[data->indexOffset + face * 3 + vert]].position, sizeof(glm::vec3));
+							},
+							[](const SMikkTSpaceContext* ctx, f32 outNorm[], const i32 face, const i32 vert) {
+								UsrPtr* data = static_cast<UsrPtr*>(ctx->m_pUserData);
+								memcpy(outNorm, &data->vertices[data->vertexOffset + data->indices[data->indexOffset + face * 3 + vert]].normal, sizeof(glm::vec3));
+							},
+							[](const SMikkTSpaceContext* ctx, f32 outUV[], const i32 face, const i32 vert) {
+								UsrPtr* data = static_cast<UsrPtr*>(ctx->m_pUserData);
+								memcpy(outUV, &data->vertices[data->vertexOffset + data->indices[data->indexOffset + face * 3 + vert]].uv, sizeof(glm::vec2));
+							},
+							[](const SMikkTSpaceContext* ctx, const f32 inTangent[], const f32 sign, const i32 face, const i32 vert) {
+								UsrPtr* data = static_cast<UsrPtr*>(ctx->m_pUserData);
+								u64 vertexIndex = data->vertexOffset + data->indices[data->indexOffset + face * 3 + vert];
+								memcpy(&data->vertices[vertexIndex].tangent, inTangent, sizeof(glm::vec3));
+								data->vertices[vertexIndex].tangent.w = sign;
+							}
+					};
+					SMikkTSpaceContext ctx{ &interface, &usrPtr };
+					genTangSpaceDefault(&ctx);
+				}
+
+				drawCmds.emplace_back(indices.size() - oldIndicesSize, 1, oldIndicesSize, oldVerticesSize, 0);
+			}
+		}
+		for(u64 i : curNode.children) {
+			self(i, transform);
+		}
+	};
+
+	for(u64 i : asset.scenes[asset.defaultScene.value_or(0)].nodeIndices) {
+		glm::mat4 transform(1.0f);
+		processNode(i, transform);
+	}
+
+	glm::vec3 size = aabb.max - aabb.min;
+	f32 scale = 1.0f / std::max(size.x, std::max(size.y, size.z));
+	glm::mat4 baseTransform = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+	baseTransform = glm::scale(baseTransform, glm::vec3(scale));
+
+	const u64 vertexBufferByteSize = vertices.size() * sizeof(Vertex);
+	const u64 indexBufferByteSize = indices.size() * sizeof(u32);
+	const u64 indirectBufferByteSize = drawCmds.size() * sizeof(VkDrawIndexedIndirectCommand);
+	Buffer stagingVertexBuffer = createBuffer(vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer stagingIndexBuffer = createBuffer(indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer stagingIndirectBuffer = createBuffer(indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer vertexBuffer = createBuffer(vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	Buffer indexBuffer = createBuffer(indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	Buffer indirectBuffer = createBuffer(indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	memcpy(stagingVertexBuffer.hostPtr, vertices.data(), vertexBufferByteSize);
+	memcpy(stagingIndexBuffer.hostPtr, indices.data(), indexBufferByteSize);
+	memcpy(stagingIndirectBuffer.hostPtr, drawCmds.data(), indirectBufferByteSize);
+
+	VkCommandPool stagingPool;
+	VkCommandBuffer stagingCmd;
+	vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+		.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+		.queueFamilyIndex = m_transferQueueFamily
+	}), nullptr, &stagingPool);
+	vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+		.commandPool = stagingPool,
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1
+	}), &stagingCmd);
+
+	vkBeginCommandBuffer(stagingCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	vkCmdCopyBuffer(stagingCmd, stagingVertexBuffer.buffer, vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = vertexBufferByteSize }));
+	vkCmdCopyBuffer(stagingCmd, stagingIndexBuffer.buffer, indexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indexBufferByteSize }));
+	vkCmdCopyBuffer(stagingCmd, stagingIndirectBuffer.buffer, indirectBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indirectBufferByteSize }));
+	vkEndCommandBuffer(stagingCmd);
+
+	vkQueueSubmit(m_transferQueue, 1, ptr(VkSubmitInfo{
+		.commandBufferCount = 1,
+		.pCommandBuffers = &stagingCmd
+	}), nullptr);
+
+	vkQueueWaitIdle(m_transferQueue);
+
+	destroyBuffer(stagingVertexBuffer);
+	destroyBuffer(stagingIndexBuffer);
+	destroyBuffer(stagingIndirectBuffer);
+
+	vkDestroyCommandPool(m_device, stagingPool, nullptr);
+
+	m_model = Model{ vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, drawCmds.size() };
+}
+
+void Renderer::destroyModel(Model model) {
+	destroyBuffer(model.vertexBuffer);
+	destroyBuffer(model.indexBuffer);
+	destroyBuffer(model.indirectBuffer);
+}

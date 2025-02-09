@@ -1,22 +1,25 @@
+#ifndef VK_UTIL_HPP
+#define VK_UTIL_HPP
+
 #include <vulkan/vulkan.h>
 
-VkImageSubresourceRange colorSubresourceRange() {
+inline VkImageSubresourceRange colorSubresourceRange() {
     return VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 }
 
-VkImageSubresourceLayers colorSubresourceLayers() {
+inline VkImageSubresourceLayers colorSubresourceLayers() {
     return VkImageSubresourceLayers{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
 }
 
-VkImageSubresourceRange depthSubresourceRange() {
+inline VkImageSubresourceRange depthSubresourceRange() {
     return VkImageSubresourceRange{ VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
 }
 
-VkImageSubresourceLayers depthSubresourceLayers() {
+inline VkImageSubresourceLayers depthSubresourceLayers() {
     return VkImageSubresourceLayers{ VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1 };
 }
 
-VkColorComponentFlags colorComponentAll() {
+inline VkColorComponentFlags colorComponentAll() {
     return VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 }
 
@@ -28,3 +31,5 @@ template<typename T>
 const auto* ptr(std::initializer_list<T> val) {
     return val.begin();
 }
+
+#endif

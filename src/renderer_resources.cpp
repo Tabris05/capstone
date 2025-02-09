@@ -1,0 +1,125 @@
+#include "renderer.hpp"
+#include <tbrs/vk_util.hpp>
+
+void Renderer::createSwapchain() {
+	VkSwapchainKHR oldSwapchain = m_swapchain;
+
+	vkCreateSwapchainKHR(m_device, ptr(VkSwapchainCreateInfoKHR{
+		.surface = m_surface,
+		.minImageCount = 3,
+		.imageFormat = m_surfaceFormat.format,
+		.imageColorSpace = m_surfaceFormat.colorSpace,
+		.imageExtent = { static_cast<u32>(m_width), static_cast<u32>(m_height) },
+		.imageArrayLayers = 1,
+		.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+		.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.queueFamilyIndexCount = 1,
+		.pQueueFamilyIndices = ptr(m_graphicsQueueFamily),
+		.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+		.presentMode = VK_PRESENT_MODE_FIFO_KHR,
+		.clipped = true,
+		.oldSwapchain = oldSwapchain
+		}), nullptr, &m_swapchain);
+	vkDestroySwapchainKHR(m_device, oldSwapchain, nullptr);
+
+	u32 numSwapchainImages;
+	vkGetSwapchainImagesKHR(m_device, m_swapchain, &numSwapchainImages, nullptr);
+
+	m_swapchainImages.resize(numSwapchainImages);
+	vkGetSwapchainImagesKHR(m_device, m_swapchain, &numSwapchainImages, m_swapchainImages.data());
+
+	m_colorTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+	m_depthTarget = createImage(m_width, m_height, m_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+}
+
+void Renderer::recreateSwapchain() {
+	glfwGetFramebufferSize(m_window, &m_width, &m_height);
+	while(m_width == 0 || m_height == 0) {
+		glfwGetFramebufferSize(m_window, &m_width, &m_height);
+		glfwWaitEvents();
+	}
+
+	vkDeviceWaitIdle(m_device);
+	destroyImage(m_colorTarget);
+	destroyImage(m_depthTarget);
+
+	createSwapchain();
+	m_swapchainDirty = false;
+}
+
+Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage) {
+	Image image;
+	vkCreateImage(m_device, ptr(VkImageCreateInfo{
+		.imageType = VK_IMAGE_TYPE_2D,
+		.format = format,
+		.extent = { width, height, 1 },
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.usage = usage,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.queueFamilyIndexCount = 1,
+		.pQueueFamilyIndices = &m_graphicsQueueFamily
+		}), nullptr, &image.image);
+
+	VkMemoryRequirements mrq;
+	vkGetImageMemoryRequirements(m_device, image.image, &mrq);
+	vkAllocateMemory(m_device, ptr(VkMemoryAllocateInfo{
+		.allocationSize = mrq.size,
+		.memoryTypeIndex = getMemoryIndex(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mrq.memoryTypeBits)
+		}), nullptr, &image.memory);
+	vkBindImageMemory(m_device, image.image, image.memory, 0);
+
+	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		.image = image.image,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.format = format,
+		.subresourceRange = (format < 124 || format > 130) ? colorSubresourceRange() : depthSubresourceRange()
+		}), nullptr, &image.view);
+
+	return image;
+}
+
+void Renderer::destroyImage(Image image) {
+	vkDestroyImageView(m_device, image.view, nullptr);
+	vkDestroyImage(m_device, image.image, nullptr);
+	vkFreeMemory(m_device, image.memory, nullptr);
+}
+
+Renderer::Buffer Renderer::createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps) {
+	Buffer buffer;
+	vkCreateBuffer(m_device, ptr(VkBufferCreateInfo{
+		.size = size,
+		.usage = usage,
+		.sharingMode = VK_SHARING_MODE_CONCURRENT,
+		.queueFamilyIndexCount = 2,
+		.pQueueFamilyIndices = ptr({ m_graphicsQueueFamily, m_transferQueueFamily })
+		}), nullptr, &buffer.buffer);
+
+	VkMemoryRequirements mrq;
+	vkGetBufferMemoryRequirements(m_device, buffer.buffer, &mrq);
+	vkAllocateMemory(m_device, ptr(VkMemoryAllocateInfo{
+		.pNext = (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) ? ptr(VkMemoryAllocateFlagsInfo{.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT }) : nullptr,
+		.allocationSize = mrq.size,
+		.memoryTypeIndex = getMemoryIndex(memProps, mrq.memoryTypeBits)
+		}), nullptr, &buffer.memory);
+	vkBindBufferMemory(m_device, buffer.buffer, buffer.memory, 0);
+
+	if(memProps & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+		vkMapMemory(m_device, buffer.memory, 0, VK_WHOLE_SIZE, 0, &buffer.hostPtr);
+	}
+	else if(usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+		buffer.devicePtr = vkGetBufferDeviceAddress(m_device, ptr(VkBufferDeviceAddressInfo{
+			.buffer = buffer.buffer
+			}));
+	}
+
+	return buffer;
+}
+
+void Renderer::destroyBuffer(Buffer buffer) {
+	vkDestroyBuffer(m_device, buffer.buffer, nullptr);
+	vkFreeMemory(m_device, buffer.memory, nullptr);
+}
