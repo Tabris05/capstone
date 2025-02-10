@@ -6,13 +6,10 @@ void Renderer::run() {
 	while(!glfwWindowShouldClose(m_window)) {
 		glfwPollEvents();
 
-		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f));
-		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		glm::mat4 projection = glm::infinitePerspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
-		projection[2][2] = 0.0f;
-		projection[3][2] = 0.1f;
-		glm::mat4 transform = projection * view * model * m_model.baseTransform;
-		PushConstants pushConstants{ m_model.vertexBuffer.devicePtr, transform, glm::transpose(glm::inverse(transform)) };
+		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
+		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
+		PushConstants pushConstants{ m_model.vertexBuffer.devicePtr, projection * view * model, glm::transpose(glm::inverse(model)) };
 
 		auto frameData = m_perFrameData[m_frameIndex];
 		vkWaitForFences(m_device, 1, &frameData.fence, true, std::numeric_limits<u64>::max());

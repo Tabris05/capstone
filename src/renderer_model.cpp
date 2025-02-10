@@ -59,8 +59,8 @@ void Renderer::createModel(std::filesystem::path path) {
 			const glm::mat3 normalTransform{ glm::transpose(glm::inverse(transform)) };
 			const fastgltf::Mesh& curMesh = asset.meshes[curNode.meshIndex.value()];
 			for(const fastgltf::Primitive& curPrimitive : curMesh.primitives) {
-				u64 oldVerticesSize = vertices.size();
-				u64 oldIndicesSize = indices.size();
+				const u64 oldVerticesSize = vertices.size();
+				const u64 oldIndicesSize = indices.size();
 
 				const fastgltf::Accessor& indexAccessor = asset.accessors[curPrimitive.indicesAccessor.value()];
 				fastgltf::iterateAccessor<u32>(asset, indexAccessor, [&indices](u32 index) {
@@ -97,8 +97,8 @@ void Renderer::createModel(std::filesystem::path path) {
 				}
 				else if(uvAccessorIndex != curPrimitive.attributes.cend()) {
 					struct UsrPtr {
-						u64 vertexOffset;
-						u64 indexOffset;
+						const u64 vertexOffset;
+						const u64 indexOffset;
 						std::vector<Vertex>& vertices;
 						std::vector<u32>& indices;
 					} usrPtr{ oldVerticesSize, oldIndicesSize, vertices, indices };
@@ -113,7 +113,7 @@ void Renderer::createModel(std::filesystem::path path) {
 							},
 							[](const SMikkTSpaceContext* ctx, f32 outPos[], const i32 face, const i32 vert) {
 								UsrPtr* data = static_cast<UsrPtr*>(ctx->m_pUserData);
-								memcpy(outPos, &data->vertices[data->vertexOffset + data->indices[data->indexOffset + face * 3 + vert]].position, sizeof(glm::vec3));
+								memcpy(outPos, &data->vertices[data->indices[data->indexOffset + face * 3 + vert]].position, sizeof(glm::vec3));
 							},
 							[](const SMikkTSpaceContext* ctx, f32 outNorm[], const i32 face, const i32 vert) {
 								UsrPtr* data = static_cast<UsrPtr*>(ctx->m_pUserData);
@@ -147,10 +147,11 @@ void Renderer::createModel(std::filesystem::path path) {
 		processNode(i, transform);
 	}
 
-	glm::vec3 size = aabb.max - aabb.min;
-	f32 scale = 1.0f / std::max(size.x, std::max(size.y, size.z));
-	glm::mat4 baseTransform = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-	baseTransform = glm::scale(baseTransform, glm::vec3(scale));
+	const glm::vec3 center = (aabb.max + aabb.min) / 2.0f;
+	const glm::vec3 size = aabb.max - aabb.min;
+	const f32 scale = 1.0f / std::max(size.x, std::max(size.y, size.z));
+
+	const glm::mat4 baseTransform = glm::scale(glm::mat4(1.0f), glm::vec3(scale)) * glm::translate(glm::mat4(1.0f), -center);
 
 	const u64 vertexBufferByteSize = vertices.size() * sizeof(Vertex);
 	const u64 indexBufferByteSize = indices.size() * sizeof(u32);

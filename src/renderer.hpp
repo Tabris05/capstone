@@ -98,7 +98,7 @@ class Renderer {
 		Model m_model;
 
 		f32 m_fov = 90.0f;
-		glm::vec3 m_position{ 0.0f, -0.5f, -2.0f };
+		glm::vec3 m_position{ 0.0f, 0.0f, -2.0f };
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
 		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);
