@@ -49,6 +49,8 @@ class Renderer {
 		};
 
 		struct Model {
+			std::vector<Image> images;
+			std::vector<VkSampler> samplers;
 			Buffer vertexBuffer;
 			Buffer indexBuffer;
 			Buffer indirectBuffer;
@@ -79,20 +81,26 @@ class Renderer {
 		u8 m_frameIndex = 0;
 		b8 m_swapchainDirty = false;
 
-		VkInstance m_instance;
-		VkPhysicalDevice m_physicalDevice;
+		VkInstance m_instance = nullptr;
+		VkPhysicalDevice m_physicalDevice = nullptr;
 		VkPhysicalDeviceMemoryProperties m_memProps;
-		u32 m_graphicsQueueFamily;
-		VkQueue m_graphicsQueue;
-		u32 m_transferQueueFamily;
-		VkQueue m_transferQueue;
 		VkDevice m_device;
-		VkSurfaceKHR m_surface;
+
+		u32 m_graphicsQueueFamily;
+		u32 m_computeQueueFamily;
+		u32 m_transferQueueFamily;
+		VkQueue m_graphicsQueue = nullptr;
+		VkQueue m_computeQueue = nullptr;
+		VkQueue m_transferQueue = nullptr;
+
+		VkSurfaceKHR m_surface = nullptr;
 		VkSurfaceFormatKHR m_surfaceFormat;
-		VkSwapchainKHR m_swapchain;
+		VkSwapchainKHR m_swapchain = nullptr;
 		std::vector<VkImage> m_swapchainImages;
-		VkPipelineLayout m_pipelineLayout;
-		VkPipeline m_pipeline;
+
+		VkPipelineLayout m_modelPipelineLayout = nullptr;
+		VkPipeline m_modelPipeline = nullptr;
+		
 		Image m_colorTarget;
 		Image m_depthTarget;
 		Model m_model;
@@ -106,7 +114,7 @@ class Renderer {
 		void createSwapchain();
 		void recreateSwapchain();
 
-		Image createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage);
+		Image createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage, u32 mips = 1);
 		void destroyImage(Image image);
 
 		Buffer createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps);

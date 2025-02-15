@@ -5,6 +5,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <mikktspace/mikktspace.h>
+#include <stb/stb_image.h>
+#include <ranges>
 #include "tbrs/vk_util.hpp"
 
 void Renderer::createModel(std::filesystem::path path) {
@@ -21,11 +23,123 @@ void Renderer::createModel(std::filesystem::path path) {
 
 	const fastgltf::Asset asset{ std::move(parser.loadGltf(data, path.parent_path(), options).get()) };
 
+	std::unordered_map<u32, b8> isSrgb;
+	std::vector<Buffer> imageStagingBuffers;
+	std::vector<Image> images;
+	std::vector<VkSampler> samplers;
 	std::vector<Vertex> vertices;
 	std::vector<u32> indices;
 	std::vector<VkDrawIndexedIndirectCommand> drawCmds;
 
 	AABB aabb;
+
+	for(const fastgltf::Material& mat : asset.materials) {
+		if(mat.pbrData.baseColorTexture.has_value()) {
+			isSrgb[asset.textures[mat.pbrData.baseColorTexture.value().textureIndex].imageIndex.value()] = true;
+		}
+
+		if(mat.emissiveTexture.has_value()) {
+			isSrgb[asset.textures[mat.emissiveTexture.value().textureIndex].imageIndex.value()] = true;
+		}
+	}
+
+	VkCommandPool stagingPool;
+	VkCommandBuffer stagingCmd;
+	vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+		.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+		.queueFamilyIndex = m_transferQueueFamily
+	}), nullptr, &stagingPool);
+	vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+		.commandPool = stagingPool,
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1
+	}), &stagingCmd);
+
+	vkBeginCommandBuffer(stagingCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+
+	for(const auto& [idx, img] : std::views::enumerate(asset.images)) {
+		i32 width;
+		i32 height;
+		const fastgltf::sources::Array& data = std::get<fastgltf::sources::Array>(img.data);
+		stbi_uc* pixels = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(data.bytes.data()), data.bytes.size(), &width, &height, nullptr, STBI_rgb_alpha);
+		u32 numMips = std::floor(std::log2(std::max(width, height))) + 1;
+		Buffer stagingBuffer = createBuffer(width * height * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		imageStagingBuffers.push_back(stagingBuffer);
+
+		memcpy(stagingBuffer.hostPtr, pixels, width * height * 4);
+
+		Image image = createImage(
+			width, height,
+			isSrgb[idx] ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM,
+			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			numMips
+		);
+		images.push_back(image);
+
+		vkCmdPipelineBarrier2(stagingCmd, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+				.srcAccessMask = VK_ACCESS_2_NONE,
+				.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+				.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				.image = image.image,
+				.subresourceRange = colorSubresourceRange()
+				
+			})
+		}));
+		vkCmdCopyBufferToImage2(stagingCmd, ptr(VkCopyBufferToImageInfo2{
+			.srcBuffer = stagingBuffer.buffer,
+			.dstImage = image.image,
+			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			.regionCount = 1,
+			.pRegions = ptr(VkBufferImageCopy2{
+				.imageSubresource = VkImageSubresourceLayers{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
+				.imageExtent = { static_cast<u32>(width), static_cast<u32>(height), 1 }
+			})
+		}));
+
+		//for(u32 i = 0; i < numMips - 1; i++) {
+		//	i32 newWidth = std::max(width / 2, 1);
+		//	i32 newHeight = std::max(height / 2, 1);
+		//
+		//	vkCmdPipelineBarrier2(stagingCmd, ptr(VkDependencyInfo{
+		//		.imageMemoryBarrierCount = 1,
+		//		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+		//			.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_BLIT_BIT,
+		//			.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		//			.dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
+		//			.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+		//			.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		//			.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		//			.image = image.image,
+		//			.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 }
+		//		})
+		//	}));
+		//
+		//	vkCmdBlitImage2(stagingCmd, ptr(VkBlitImageInfo2{
+		//		.srcImage = image.image,
+		//		.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		//		.dstImage = image.image,
+		//		.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		//		.regionCount = 1,
+		//		.pRegions = ptr(VkImageBlit2{
+		//			.srcSubresource = VkImageSubresourceLayers{ VK_IMAGE_ASPECT_COLOR_BIT, i, 0, 1 },
+		//			.srcOffsets = { { 0, 0, 0 }, { width, height, 1 } },
+		//			.dstSubresource = VkImageSubresourceLayers{ VK_IMAGE_ASPECT_COLOR_BIT, i + 1, 0, 1 },
+		//			.dstOffsets = { { 0, 0, 0 }, {  newWidth, newHeight, 1 } }
+		//		}),
+		//		.filter = VK_FILTER_LINEAR
+		//	}));
+		//
+		//	width = newWidth;
+		//	height = newHeight;
+		//}
+
+		stbi_image_free(pixels);
+	}
 
 	u64 numVertices = 0;
 	u64 numIndices = 0;
@@ -166,20 +280,7 @@ void Renderer::createModel(std::filesystem::path path) {
 	memcpy(stagingVertexBuffer.hostPtr, vertices.data(), vertexBufferByteSize);
 	memcpy(stagingIndexBuffer.hostPtr, indices.data(), indexBufferByteSize);
 	memcpy(stagingIndirectBuffer.hostPtr, drawCmds.data(), indirectBufferByteSize);
-
-	VkCommandPool stagingPool;
-	VkCommandBuffer stagingCmd;
-	vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
-		.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-		.queueFamilyIndex = m_transferQueueFamily
-	}), nullptr, &stagingPool);
-	vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
-		.commandPool = stagingPool,
-		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-		.commandBufferCount = 1
-	}), &stagingCmd);
-
-	vkBeginCommandBuffer(stagingCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	
 	vkCmdCopyBuffer(stagingCmd, stagingVertexBuffer.buffer, vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = vertexBufferByteSize }));
 	vkCmdCopyBuffer(stagingCmd, stagingIndexBuffer.buffer, indexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indexBufferByteSize }));
 	vkCmdCopyBuffer(stagingCmd, stagingIndirectBuffer.buffer, indirectBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indirectBufferByteSize }));
@@ -192,16 +293,23 @@ void Renderer::createModel(std::filesystem::path path) {
 
 	vkQueueWaitIdle(m_transferQueue);
 
+	for(Buffer i : imageStagingBuffers) {
+		destroyBuffer(i);
+	}
+
 	destroyBuffer(stagingVertexBuffer);
 	destroyBuffer(stagingIndexBuffer);
 	destroyBuffer(stagingIndirectBuffer);
 
 	vkDestroyCommandPool(m_device, stagingPool, nullptr);
-
-	m_model = Model{ vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, drawCmds.size() };
+	m_model = Model{ std::move(images), std::move(samplers), vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, drawCmds.size() };
 }
 
 void Renderer::destroyModel(Model model) {
+	for(Image i : model.images) {
+		destroyImage(i);
+	}
+
 	destroyBuffer(model.vertexBuffer);
 	destroyBuffer(model.indexBuffer);
 	destroyBuffer(model.indirectBuffer);

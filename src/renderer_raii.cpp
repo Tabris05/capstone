@@ -50,11 +50,15 @@ Renderer::Renderer() {
 	// VkDevice and VkQueues
 	{
 		m_graphicsQueueFamily = getQueue(VK_QUEUE_GRAPHICS_BIT);
+		m_computeQueueFamily = getQueue(VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT);
 		m_transferQueueFamily = getQueue(VK_QUEUE_TRANSFER_BIT, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 		vkCreateDevice(m_physicalDevice, ptr(VkDeviceCreateInfo{
 			.pNext = ptr(VkPhysicalDeviceVulkan12Features{
 				.pNext = ptr(VkPhysicalDeviceVulkan13Features{
-					.pNext = ptr(VkPhysicalDeviceVulkan14Features{ .maintenance5 = true }),
+					.pNext = ptr(VkPhysicalDeviceVulkan14Features{
+						.maintenance5 = true,
+						.pushDescriptor = true
+					}),
 					.synchronization2 = true,
 					.dynamicRendering = true,
 				}),
@@ -62,10 +66,15 @@ Renderer::Renderer() {
 				.scalarBlockLayout = true,
 				.bufferDeviceAddress = true
 			}),
-			.queueCreateInfoCount = 2,
+			.queueCreateInfoCount = 3,
 			.pQueueCreateInfos = ptr({
 				VkDeviceQueueCreateInfo{
 					.queueFamilyIndex = m_graphicsQueueFamily,
+					.queueCount = 1,
+					.pQueuePriorities = ptr(1.0f)
+				},
+				VkDeviceQueueCreateInfo{
+					.queueFamilyIndex = m_computeQueueFamily,
 					.queueCount = 1,
 					.pQueuePriorities = ptr(1.0f)
 				},
@@ -77,11 +86,15 @@ Renderer::Renderer() {
 			}),
 			.enabledExtensionCount = 1,
 			.ppEnabledExtensionNames = ptr<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
-			.pEnabledFeatures = ptr(VkPhysicalDeviceFeatures{ .multiDrawIndirect = true })
+			.pEnabledFeatures = ptr(VkPhysicalDeviceFeatures{ 
+				.multiDrawIndirect = true,
+				.samplerAnisotropy = true
+			})
 		}), nullptr, &m_device);
 
 		volkLoadDevice(m_device);
 		vkGetDeviceQueue(m_device, m_graphicsQueueFamily, 0, &m_graphicsQueue);
+		vkGetDeviceQueue(m_device, m_computeQueueFamily, 0, &m_computeQueue);
 		vkGetDeviceQueue(m_device, m_transferQueueFamily, 0, &m_transferQueue);
 	}
 
@@ -90,7 +103,6 @@ Renderer::Renderer() {
 		glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface);
 		vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, ptr(1u), &m_surfaceFormat);
 
-		m_swapchain = nullptr;
 		createSwapchain();
 	}
 
@@ -106,7 +118,7 @@ Renderer::Renderer() {
 				.offset = 0,
 				.size = sizeof(PushConstants)
 			})
-		}), nullptr, &m_pipelineLayout);
+		}), nullptr, &m_modelPipelineLayout);
 		vkCreateGraphicsPipelines(m_device, nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
 			.pNext = ptr(VkPipelineRenderingCreateInfo{
 				.colorAttachmentCount = 1,
@@ -140,8 +152,8 @@ Renderer::Renderer() {
 			.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = VK_COMPARE_OP_GREATER }),
 			.pColorBlendState = ptr(VkPipelineColorBlendStateCreateInfo{ .attachmentCount = 1, .pAttachments = ptr(VkPipelineColorBlendAttachmentState{ .colorWriteMask = colorComponentAll() })}),
 			.pDynamicState = ptr(VkPipelineDynamicStateCreateInfo{ .dynamicStateCount = 2, .pDynamicStates = ptr({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }) }),
-			.layout = m_pipelineLayout
-		}), nullptr, &m_pipeline);
+			.layout = m_modelPipelineLayout
+		}), nullptr, &m_modelPipeline);
 	}
 
 	// Load Model
@@ -194,8 +206,8 @@ Renderer::~Renderer() {
 		vkDestroyFence(m_device, m_perFrameData[i].fence, nullptr);
 	}
 
-	vkDestroyPipeline(m_device, m_pipeline, nullptr);
-	vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
+	vkDestroyPipeline(m_device, m_modelPipeline, nullptr);
+	vkDestroyPipelineLayout(m_device, m_modelPipelineLayout, nullptr);
 
 	destroyModel(m_model);
 

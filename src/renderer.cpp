@@ -30,7 +30,7 @@ void Renderer::run() {
 			.imageMemoryBarrierCount = 2,
 			.pImageMemoryBarriers = ptr({
 				VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+					.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
 					.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
 					.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
 					.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -45,7 +45,7 @@ void Renderer::run() {
 					.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
 					.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
 					.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-					.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+					.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
 					.image = m_depthTarget.image,
 					.subresourceRange = depthSubresourceRange()
 				},
@@ -65,18 +65,18 @@ void Renderer::run() {
 			}),
 			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
 				.imageView = m_depthTarget.view,
-				.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+				.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 				.clearValue = { 0.0f }
 			})
-			}));
+		}));
 
 		vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
 		vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipeline);
 		vkCmdBindIndexBuffer(frameData.cmdBuffer, m_model.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdPushConstants(frameData.cmdBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
+		vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
 		vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 
 		vkCmdEndRendering(frameData.cmdBuffer);
@@ -87,7 +87,7 @@ void Renderer::run() {
 				VkImageMemoryBarrier2{
 					.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
 					.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
 					.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
 					.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 					.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -95,9 +95,9 @@ void Renderer::run() {
 					.subresourceRange = colorSubresourceRange()
 				},
 				VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+					.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
 					.srcAccessMask = VK_ACCESS_2_NONE,
-					.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
 					.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
 					.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 					.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -105,7 +105,7 @@ void Renderer::run() {
 					.subresourceRange = colorSubresourceRange()
 				}
 			})
-			}));
+		}));
 
 		vkCmdBlitImage2(frameData.cmdBuffer, ptr(VkBlitImageInfo2{
 			.srcImage = m_colorTarget.image,
@@ -120,33 +120,37 @@ void Renderer::run() {
 				.dstOffsets = { { 0, 0, 0 }, { m_width, m_height, 1 } }
 			}),
 			.filter = VK_FILTER_NEAREST
-			}));
+		}));
 
 		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+				.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
 				.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-				.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
 				.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 				.image = m_swapchainImages[imageIndex],
 				.subresourceRange = colorSubresourceRange()
 			})
-			}));
+		}));
 
 		vkEndCommandBuffer(frameData.cmdBuffer);
 
-		vkQueueSubmit(m_graphicsQueue, 1, ptr(VkSubmitInfo{
-			.waitSemaphoreCount = 1,
-			.pWaitSemaphores = &frameData.acquireSem,
-			.pWaitDstStageMask = ptr<VkPipelineStageFlags>(VK_PIPELINE_STAGE_TRANSFER_BIT),
-			.commandBufferCount = 1,
-			.pCommandBuffers = &frameData.cmdBuffer,
-			.signalSemaphoreCount = 1,
-			.pSignalSemaphores = &frameData.presentSem
-			}), frameData.fence);
+		vkQueueSubmit2(m_graphicsQueue, 1, ptr(VkSubmitInfo2{
+			.waitSemaphoreInfoCount = 1,
+			.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
+				.semaphore = frameData.acquireSem,
+				.stageMask = VK_PIPELINE_STAGE_2_BLIT_BIT
+			}),
+			.commandBufferInfoCount = 1,
+			.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{ .commandBuffer = frameData.cmdBuffer }),
+			.signalSemaphoreInfoCount = 1,
+			.pSignalSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
+				.semaphore = frameData.presentSem,
+				.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+			}),
+		}), frameData.fence);
 
 		result = vkQueuePresentKHR(m_graphicsQueue, ptr(VkPresentInfoKHR{
 			.waitSemaphoreCount = 1,
@@ -154,7 +158,7 @@ void Renderer::run() {
 			.swapchainCount = 1,
 			.pSwapchains = &m_swapchain,
 			.pImageIndices = &imageIndex
-			}));
+		}));
 
 		if(result != VK_SUCCESS || m_swapchainDirty) {
 			recreateSwapchain();

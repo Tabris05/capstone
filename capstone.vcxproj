@@ -157,6 +157,7 @@
   <ItemGroup>
     <ClCompile Include="include\mikktspace\mikktspace.c" />
     <ClCompile Include="include\nfd\nfd_win.cpp" />
+    <ClCompile Include="include\stb\stb_image.c" />
     <ClCompile Include="include\volk\volk.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\renderer.cpp" />
