@@ -81,26 +81,42 @@ class Renderer {
 		u8 m_frameIndex = 0;
 		b8 m_swapchainDirty = false;
 
-		VkInstance m_instance = nullptr;
-		VkPhysicalDevice m_physicalDevice = nullptr;
+		VkInstance m_instance = {};
+		VkPhysicalDevice m_physicalDevice = {};
 		VkPhysicalDeviceMemoryProperties m_memProps;
 		VkDevice m_device;
 
 		u32 m_graphicsQueueFamily;
 		u32 m_computeQueueFamily;
 		u32 m_transferQueueFamily;
-		VkQueue m_graphicsQueue = nullptr;
-		VkQueue m_computeQueue = nullptr;
-		VkQueue m_transferQueue = nullptr;
+		VkQueue m_graphicsQueue = {};
+		VkQueue m_computeQueue = {};
+		VkQueue m_transferQueue = {};
 
-		VkSurfaceKHR m_surface = nullptr;
+		VkSurfaceKHR m_surface = {};
 		VkSurfaceFormatKHR m_surfaceFormat;
-		VkSwapchainKHR m_swapchain = nullptr;
+		VkSwapchainKHR m_swapchain = {};
 		std::vector<VkImage> m_swapchainImages;
 
-		VkPipelineLayout m_modelPipelineLayout = nullptr;
-		VkPipeline m_modelPipeline = nullptr;
+		VkPipelineLayout m_modelPipelineLayout = {};
+		VkPipeline m_modelPipeline = {};
 		
+		VkCommandPool m_transferPool;
+		VkCommandBuffer m_transferCmd;
+
+		VkCommandPool m_computePool;
+		VkCommandBuffer m_computeCmd;
+
+		VkSemaphore m_mipSem;
+
+		VkDescriptorSetLayout m_srgbSetLayout;
+		VkPipelineLayout m_srgbPipelineLayout;
+		VkPipeline m_srgbPipeline;
+
+		VkDescriptorSetLayout m_mipSetLayout;
+		VkPipelineLayout m_mipPipelineLayout;
+		VkPipeline m_mipPipeline;
+
 		Image m_colorTarget;
 		Image m_depthTarget;
 		Model m_model;

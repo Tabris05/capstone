@@ -11,6 +11,14 @@
 #ifndef _NFD_GLFW3_H
 #define _NFD_GLFW3_H
 
+#if defined(_WIN32)
+    #define GLFW_EXPOSE_NATIVE_WIN32
+#elif defined(__APPLE__)
+    #define GLFW_EXPOSE_NATIVE_COCOA
+#elif defined(__linux__)
+    #define GLFW_EXPOSE_NATIVE_X11
+#endif
+
 #include "nfd.h"
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>

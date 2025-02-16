@@ -1,0 +1,16 @@
+#version 460
+
+layout(rgba8, binding = 0) uniform restrict readonly image2D lowerMip;
+layout(rgba8, binding = 1) uniform restrict writeonly image2D higherMip;
+
+layout(local_size_x = 8, local_size_y = 8) in;
+void main() {
+    vec4 pixel = vec4(0.0f);
+
+    pixel += imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(0, 0)));
+    pixel += imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(0, 1)));
+    pixel += imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(1, 0)));
+    pixel += imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(1, 1)));
+
+    imageStore(higherMip, ivec2(gl_GlobalInvocationID.xy), pixel / 4.0f);
+}

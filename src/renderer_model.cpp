@@ -7,6 +7,7 @@
 #include <mikktspace/mikktspace.h>
 #include <stb/stb_image.h>
 #include <ranges>
+#include <execution>
 #include "tbrs/vk_util.hpp"
 
 void Renderer::createModel(std::filesystem::path path) {
@@ -24,6 +25,7 @@ void Renderer::createModel(std::filesystem::path path) {
 	const fastgltf::Asset asset{ std::move(parser.loadGltf(data, path.parent_path(), options).get()) };
 
 	std::unordered_map<u32, b8> isSrgb;
+	std::vector<VkImageView> mipViews;
 	std::vector<Buffer> imageStagingBuffers;
 	std::vector<Image> images;
 	std::vector<VkSampler> samplers;
@@ -43,40 +45,27 @@ void Renderer::createModel(std::filesystem::path path) {
 		}
 	}
 
-	VkCommandPool stagingPool;
-	VkCommandBuffer stagingCmd;
-	vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
-		.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-		.queueFamilyIndex = m_transferQueueFamily
-	}), nullptr, &stagingPool);
-	vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
-		.commandPool = stagingPool,
-		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-		.commandBufferCount = 1
-	}), &stagingCmd);
-
-	vkBeginCommandBuffer(stagingCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	
+	vkBeginCommandBuffer(m_transferCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	vkBeginCommandBuffer(m_computeCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 
 	for(const auto& [idx, img] : std::views::enumerate(asset.images)) {
 		i32 width;
 		i32 height;
 		const fastgltf::sources::Array& data = std::get<fastgltf::sources::Array>(img.data);
 		stbi_uc* pixels = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(data.bytes.data()), data.bytes.size(), &width, &height, nullptr, STBI_rgb_alpha);
-		u32 numMips = std::floor(std::log2(std::max(width, height))) + 1;
+		
+		u8 numMips = std::floor(std::log2(std::max(width, height))) + 1;
+
 		Buffer stagingBuffer = createBuffer(width * height * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 		imageStagingBuffers.push_back(stagingBuffer);
-
 		memcpy(stagingBuffer.hostPtr, pixels, width * height * 4);
+		stbi_image_free(pixels);
 
-		Image image = createImage(
-			width, height,
-			isSrgb[idx] ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM,
-			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			numMips
-		);
+		Image image = createImage(width, height, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, numMips);
 		images.push_back(image);
 
-		vkCmdPipelineBarrier2(stagingCmd, ptr(VkDependencyInfo{
+		vkCmdPipelineBarrier2(m_transferCmd, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 				.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
@@ -87,10 +76,10 @@ void Renderer::createModel(std::filesystem::path path) {
 				.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				.image = image.image,
 				.subresourceRange = colorSubresourceRange()
-				
 			})
 		}));
-		vkCmdCopyBufferToImage2(stagingCmd, ptr(VkCopyBufferToImageInfo2{
+
+		vkCmdCopyBufferToImage2(m_transferCmd, ptr(VkCopyBufferToImageInfo2{
 			.srcBuffer = stagingBuffer.buffer,
 			.dstImage = image.image,
 			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -101,45 +90,102 @@ void Renderer::createModel(std::filesystem::path path) {
 			})
 		}));
 
-		//for(u32 i = 0; i < numMips - 1; i++) {
-		//	i32 newWidth = std::max(width / 2, 1);
-		//	i32 newHeight = std::max(height / 2, 1);
-		//
-		//	vkCmdPipelineBarrier2(stagingCmd, ptr(VkDependencyInfo{
-		//		.imageMemoryBarrierCount = 1,
-		//		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-		//			.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_BLIT_BIT,
-		//			.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		//			.dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
-		//			.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-		//			.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		//			.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		//			.image = image.image,
-		//			.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 }
-		//		})
-		//	}));
-		//
-		//	vkCmdBlitImage2(stagingCmd, ptr(VkBlitImageInfo2{
-		//		.srcImage = image.image,
-		//		.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		//		.dstImage = image.image,
-		//		.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		//		.regionCount = 1,
-		//		.pRegions = ptr(VkImageBlit2{
-		//			.srcSubresource = VkImageSubresourceLayers{ VK_IMAGE_ASPECT_COLOR_BIT, i, 0, 1 },
-		//			.srcOffsets = { { 0, 0, 0 }, { width, height, 1 } },
-		//			.dstSubresource = VkImageSubresourceLayers{ VK_IMAGE_ASPECT_COLOR_BIT, i + 1, 0, 1 },
-		//			.dstOffsets = { { 0, 0, 0 }, {  newWidth, newHeight, 1 } }
-		//		}),
-		//		.filter = VK_FILTER_LINEAR
-		//	}));
-		//
-		//	width = newWidth;
-		//	height = newHeight;
-		//}
+		vkCmdPipelineBarrier2(m_transferCmd, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+				.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+				.dstAccessMask = VK_ACCESS_2_NONE,
+				.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.image = image.image,
+				.subresourceRange = colorSubresourceRange()
+			})
+		}));
 
-		stbi_image_free(pixels);
+		VkImageView mip0View;
+		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+			.image = image.image,
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = VK_FORMAT_R8G8B8A8_UNORM,
+			.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+		}), nullptr, &mip0View);
+		mipViews.push_back(mip0View);
+
+		if(isSrgb[idx]) {
+			vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_srgbPipeline);
+			vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_srgbPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+				.pImageInfo = ptr(VkDescriptorImageInfo{
+					.imageView = mipViews.back(),
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+				})
+			}));
+
+			vkCmdDispatch(m_computeCmd, (width + 7) / 8, (height + 7) / 8, 1);
+
+			vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+				.imageMemoryBarrierCount = 1,
+				.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+					.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.image = image.image,
+					.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+				})
+			}));
+		}
+
+		vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_mipPipeline);
+		for(u8 i = 1; i < numMips; i++) {
+			VkImageView curMipView;
+			vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+				.image = image.image,
+				.viewType = VK_IMAGE_VIEW_TYPE_2D,
+				.format = VK_FORMAT_R8G8B8A8_UNORM,
+				.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+			}), nullptr, &curMipView);
+
+			vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_mipPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+				.descriptorCount = 2,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+				.pImageInfo = ptr({
+					VkDescriptorImageInfo{
+						.imageView = mipViews.back(),
+						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+					},
+					VkDescriptorImageInfo{
+						.imageView = curMipView,
+						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+					}
+				})
+			}));
+			mipViews.push_back(curMipView);
+
+			vkCmdDispatch(m_computeCmd, (std::max(width / (1 << i), 1) + 7) / 8, (std::max(height / (1 << i), 1) + 7) / 8, 1);
+
+			vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+				.imageMemoryBarrierCount = 1,
+				.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+					.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.image = image.image,
+					.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, i, 0, 1 }
+				})
+			}));
+		}
 	}
+
+	vkEndCommandBuffer(m_computeCmd);
 
 	u64 numVertices = 0;
 	u64 numIndices = 0;
@@ -281,14 +327,25 @@ void Renderer::createModel(std::filesystem::path path) {
 	memcpy(stagingIndexBuffer.hostPtr, indices.data(), indexBufferByteSize);
 	memcpy(stagingIndirectBuffer.hostPtr, drawCmds.data(), indirectBufferByteSize);
 	
-	vkCmdCopyBuffer(stagingCmd, stagingVertexBuffer.buffer, vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = vertexBufferByteSize }));
-	vkCmdCopyBuffer(stagingCmd, stagingIndexBuffer.buffer, indexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indexBufferByteSize }));
-	vkCmdCopyBuffer(stagingCmd, stagingIndirectBuffer.buffer, indirectBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indirectBufferByteSize }));
-	vkEndCommandBuffer(stagingCmd);
+	vkCmdCopyBuffer(m_transferCmd, stagingVertexBuffer.buffer, vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = vertexBufferByteSize }));
+	vkCmdCopyBuffer(m_transferCmd, stagingIndexBuffer.buffer, indexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indexBufferByteSize }));
+	vkCmdCopyBuffer(m_transferCmd, stagingIndirectBuffer.buffer, indirectBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indirectBufferByteSize }));
+	vkEndCommandBuffer(m_transferCmd);
+
 
 	vkQueueSubmit(m_transferQueue, 1, ptr(VkSubmitInfo{
 		.commandBufferCount = 1,
-		.pCommandBuffers = &stagingCmd
+		.pCommandBuffers = &m_transferCmd,
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &m_mipSem
+	}), nullptr);
+
+	vkQueueSubmit(m_computeQueue, 1, ptr(VkSubmitInfo{
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = &m_mipSem,
+		.pWaitDstStageMask = ptr<VkPipelineStageFlags>(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT),
+		.commandBufferCount = 1,
+		.pCommandBuffers = &m_computeCmd
 	}), nullptr);
 
 	vkQueueWaitIdle(m_transferQueue);
@@ -301,7 +358,16 @@ void Renderer::createModel(std::filesystem::path path) {
 	destroyBuffer(stagingIndexBuffer);
 	destroyBuffer(stagingIndirectBuffer);
 
-	vkDestroyCommandPool(m_device, stagingPool, nullptr);
+	vkResetCommandPool(m_device, m_transferPool, 0);
+
+	vkQueueWaitIdle(m_computeQueue);
+
+	for(VkImageView i : mipViews) {
+		vkDestroyImageView(m_device, i, nullptr);
+	}
+
+	vkResetCommandPool(m_device, m_computePool, 0);
+
 	m_model = Model{ std::move(images), std::move(samplers), vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, drawCmds.size() };
 }
 

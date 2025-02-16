@@ -106,6 +106,98 @@ Renderer::Renderer() {
 		createSwapchain();
 	}
 
+	// transfer objects
+	{
+		std::vector<u32> srgbSrc = getShaderSource("shaders/srgb.comp.spv");
+		std::vector<u32> mipSrc = getShaderSource("shaders/mip.comp.spv");
+
+		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+			.queueFamilyIndex = m_transferQueueFamily
+		}), nullptr, &m_transferPool);
+		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+			.commandPool = m_transferPool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		}), &m_transferCmd);
+
+		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+			.queueFamilyIndex = m_computeQueueFamily
+		}), nullptr, &m_computePool);
+		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+			.commandPool = m_computePool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		}), &m_computeCmd);
+
+		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_mipSem);
+
+		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
+			.bindingCount = 1,
+			.pBindings = ptr(VkDescriptorSetLayoutBinding{
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+			})
+		}), nullptr, &m_srgbSetLayout);
+
+		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+			.setLayoutCount = 1,
+			.pSetLayouts = &m_srgbSetLayout
+		}), nullptr, &m_srgbPipelineLayout);
+
+		vkCreateComputePipelines(m_device, nullptr, 1, ptr(VkComputePipelineCreateInfo{
+			.stage = {
+				.pNext = ptr(VkShaderModuleCreateInfo{
+					.codeSize = srgbSrc.size() * sizeof(u32),
+					.pCode = srgbSrc.data()
+				}),
+				.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+				.pName = "main"
+			},
+			.layout = m_srgbPipelineLayout
+		}), nullptr, &m_srgbPipeline);
+
+		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
+			.bindingCount = 2,
+			.pBindings = ptr({
+				VkDescriptorSetLayoutBinding{
+					.binding = 0,
+					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+				},
+				VkDescriptorSetLayoutBinding{
+					.binding = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+				}
+			})
+		}), nullptr, &m_mipSetLayout);
+
+		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+			.setLayoutCount = 1,
+			.pSetLayouts = &m_mipSetLayout
+		}), nullptr, &m_mipPipelineLayout);
+
+		vkCreateComputePipelines(m_device, nullptr, 1, ptr(VkComputePipelineCreateInfo{
+			.stage = {
+				.pNext = ptr(VkShaderModuleCreateInfo{
+					.codeSize = mipSrc.size() * sizeof(u32),
+					.pCode = mipSrc.data()
+				}),
+				.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+				.pName = "main"
+			},
+			.layout = m_mipPipelineLayout
+		}), nullptr, &m_mipPipeline);
+	}
+
 	// VkPipelineLayout and VkPipeline
 	{
 		std::vector<u32> vsSrc = getShaderSource("shaders/model.vert.spv");
@@ -159,16 +251,15 @@ Renderer::Renderer() {
 	// Load Model
 	{
 		nfdu8char_t* outPath;
-		nfdwindowhandle_t parentWindow;
-		NFD_GetNativeWindowFromGLFWWindow(m_window, &parentWindow);
+		nfdwindowhandle_t nativeWindow = {};
+		NFD_GetNativeWindowFromGLFWWindow(m_window, &nativeWindow);
 
 		nfdu8filteritem_t filters[2] = { { "glTF Binary", "glb" }, { "glTF Seperate", "gltf" } };
 		nfdopendialogu8args_t args = { 0 };
 		nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
 			.filterList = ptr({ nfdu8filteritem_t{ "glTF Binary", "glb" }, nfdu8filteritem_t{ "glTF Seperate", "gltf" } }),
 			.filterCount = 2,
-			.parentWindow = parentWindow
-			
+			.parentWindow = nativeWindow
 		}));
 
 		if(result == NFD_OKAY) {
@@ -205,6 +296,18 @@ Renderer::~Renderer() {
 		vkDestroySemaphore(m_device, m_perFrameData[i].presentSem, nullptr);
 		vkDestroyFence(m_device, m_perFrameData[i].fence, nullptr);
 	}
+
+	vkDestroyCommandPool(m_device, m_transferPool, nullptr);
+	vkDestroyCommandPool(m_device, m_computePool, nullptr);
+	vkDestroySemaphore(m_device, m_mipSem, nullptr);
+
+	vkDestroyPipeline(m_device, m_mipPipeline, nullptr);
+	vkDestroyPipelineLayout(m_device, m_mipPipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_device, m_mipSetLayout, nullptr);
+
+	vkDestroyPipeline(m_device, m_srgbPipeline, nullptr);
+	vkDestroyPipelineLayout(m_device, m_srgbPipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_device, m_srgbSetLayout, nullptr);
 
 	vkDestroyPipeline(m_device, m_modelPipeline, nullptr);
 	vkDestroyPipelineLayout(m_device, m_modelPipelineLayout, nullptr);

@@ -104,8 +104,8 @@ Renderer::Buffer Renderer::createBuffer(u64 size, VkBufferUsageFlags usage, VkMe
 		.size = size,
 		.usage = usage,
 		.sharingMode = VK_SHARING_MODE_CONCURRENT,
-		.queueFamilyIndexCount = 2,
-		.pQueueFamilyIndices = ptr({ m_graphicsQueueFamily, m_transferQueueFamily })
+		.queueFamilyIndexCount = 3,
+		.pQueueFamilyIndices = ptr({ m_graphicsQueueFamily, m_computeQueueFamily, m_transferQueueFamily })
 	}), nullptr, &buffer.buffer);
 
 	VkMemoryRequirements mrq;
@@ -121,9 +121,7 @@ Renderer::Buffer Renderer::createBuffer(u64 size, VkBufferUsageFlags usage, VkMe
 		vkMapMemory(m_device, buffer.memory, 0, VK_WHOLE_SIZE, 0, &buffer.hostPtr);
 	}
 	else if(usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
-		buffer.devicePtr = vkGetBufferDeviceAddress(m_device, ptr(VkBufferDeviceAddressInfo{
-			.buffer = buffer.buffer
-		}));
+		buffer.devicePtr = vkGetBufferDeviceAddress(m_device, ptr(VkBufferDeviceAddressInfo{ .buffer = buffer.buffer }));
 	}
 
 	return buffer;
