@@ -32,6 +32,9 @@ void Renderer::createModel(std::filesystem::path path) {
 	std::vector<Vertex> vertices;
 	std::vector<u32> indices;
 	std::vector<VkDrawIndexedIndirectCommand> drawCmds;
+	std::vector<VkDescriptorImageInfo> descriptors;
+	VkDescriptorPool pool = {};
+	VkDescriptorSet set = {};
 
 	AABB aabb;
 
@@ -74,6 +77,8 @@ void Renderer::createModel(std::filesystem::path path) {
 				.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
 				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 				.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = image.image,
 				.subresourceRange = colorSubresourceRange()
 			})
@@ -99,6 +104,8 @@ void Renderer::createModel(std::filesystem::path path) {
 				.dstAccessMask = VK_ACCESS_2_NONE,
 				.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = image.image,
 				.subresourceRange = colorSubresourceRange()
 			})
@@ -135,6 +142,8 @@ void Renderer::createModel(std::filesystem::path path) {
 					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
 					.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 					.image = image.image,
 					.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
 				})
@@ -148,7 +157,7 @@ void Renderer::createModel(std::filesystem::path path) {
 				.image = image.image,
 				.viewType = VK_IMAGE_VIEW_TYPE_2D,
 				.format = VK_FORMAT_R8G8B8A8_UNORM,
-				.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+				.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 }
 			}), nullptr, &curMipView);
 
 			vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_mipPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
@@ -178,14 +187,85 @@ void Renderer::createModel(std::filesystem::path path) {
 					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
 					.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 					.image = image.image,
-					.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, i, 0, 1 }
+					.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 }
 				})
 			}));
 		}
+
+		vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+				.dstAccessMask = VK_ACCESS_2_NONE,
+				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.image = image.image,
+				.subresourceRange = colorSubresourceRange()
+			})
+		}));
 	}
 
 	vkEndCommandBuffer(m_computeCmd);
+
+	for(const fastgltf::Sampler& s : asset.samplers) {
+		VkSampler sampler;
+		vkCreateSampler(m_device, ptr(VkSamplerCreateInfo{
+			.magFilter = m_filterMap.at(s.magFilter.value_or(fastgltf::Filter::Linear)),
+			.minFilter = m_filterMap.at(s.minFilter.value_or(fastgltf::Filter::Linear)),
+			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+			.addressModeU = m_wrapMap.at(s.wrapS),
+			.addressModeV = m_wrapMap.at(s.wrapT),
+			.anisotropyEnable = true,
+			.maxAnisotropy = 16,
+			.maxLod = VK_LOD_CLAMP_NONE
+		}), nullptr, &sampler);
+		samplers.push_back(sampler);
+	}
+
+	for(const fastgltf::Texture tex : asset.textures) {
+		VkDescriptorImageInfo info = {
+			.sampler = samplers[tex.samplerIndex.value()],
+			.imageView = images[tex.imageIndex.value()].view,
+			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		};
+
+		descriptors.push_back(info);
+	}
+
+	vkCreateDescriptorPool(m_device, ptr(VkDescriptorPoolCreateInfo{
+		.maxSets = 1,
+		.poolSizeCount = 1,
+		.pPoolSizes = ptr(VkDescriptorPoolSize{
+			.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = static_cast<u32>(descriptors.size())
+		})
+	}), nullptr, &pool);
+
+	vkAllocateDescriptorSets(m_device, ptr(VkDescriptorSetAllocateInfo{
+		.pNext = ptr(VkDescriptorSetVariableDescriptorCountAllocateInfo{
+			.descriptorSetCount = 1,
+			.pDescriptorCounts = ptr<u32>(descriptors.size())
+		}),
+		.descriptorPool = pool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &m_modelSetLayout
+	}), &set);
+
+	vkUpdateDescriptorSets(m_device, 1, ptr(VkWriteDescriptorSet{
+		.dstSet = set,
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorCount = static_cast<u32>(descriptors.size()),
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.pImageInfo = descriptors.data()
+	}), 0, nullptr);
 
 	u64 numVertices = 0;
 	u64 numIndices = 0;
@@ -368,13 +448,19 @@ void Renderer::createModel(std::filesystem::path path) {
 
 	vkResetCommandPool(m_device, m_computePool, 0);
 
-	m_model = Model{ std::move(images), std::move(samplers), vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, drawCmds.size() };
+	m_model = Model{ std::move(images), std::move(samplers), pool, set, vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, drawCmds.size() };
 }
 
 void Renderer::destroyModel(Model model) {
 	for(Image i : model.images) {
 		destroyImage(i);
 	}
+
+	for(VkSampler i : model.samplers) {
+		vkDestroySampler(m_device, i, nullptr);
+	}
+
+	vkDestroyDescriptorPool(m_device, model.texPool, nullptr);
 
 	destroyBuffer(model.vertexBuffer);
 	destroyBuffer(model.indexBuffer);

@@ -11,3 +11,5 @@ struct Vertex {
     GLM vec4 tangent;
     GLM vec2 uv;
 };
+
+#undef GLM

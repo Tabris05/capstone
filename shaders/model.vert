@@ -6,6 +6,7 @@
 #include "../shared/vertex.h"
 
 layout(location = 0) out vec3 outNormal;
+layout(location = 1) out vec2 outUV;
 
 layout(buffer_reference, scalar) buffer VertexBuffer {
     Vertex vertices[];
@@ -21,4 +22,5 @@ void main() {
     Vertex v = pcs.vertexBuffer.vertices[gl_VertexIndex];
     gl_Position = pcs.transform * vec4(v.position, 1.0f);
     outNormal = pcs.normalTransform * v.normal;
+    outUV = v.uv;
 }

@@ -8,6 +8,8 @@
 #include <vector>
 #include <filesystem>
 #include <limits>
+#include <unordered_map>
+#include <fastgltf/types.hpp>
 
 class Renderer {
 	public:
@@ -28,20 +30,35 @@ class Renderer {
 		static constexpr VkFormat m_colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
 		static constexpr VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
 
+		static const inline std::unordered_map<fastgltf::Filter, VkFilter> m_filterMap = {
+			{ fastgltf::Filter::Nearest, VK_FILTER_NEAREST },
+			{ fastgltf::Filter::Linear, VK_FILTER_LINEAR },
+			{ fastgltf::Filter::NearestMipMapNearest, VK_FILTER_NEAREST },
+			{ fastgltf::Filter::LinearMipMapNearest, VK_FILTER_LINEAR },
+			{ fastgltf::Filter::NearestMipMapLinear, VK_FILTER_NEAREST },
+			{ fastgltf::Filter::LinearMipMapLinear, VK_FILTER_LINEAR },
+		};
+
+		static const inline std::unordered_map<fastgltf::Wrap, VkSamplerAddressMode> m_wrapMap = {
+			{ fastgltf::Wrap::ClampToEdge, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE },
+			{ fastgltf::Wrap::Repeat, VK_SAMPLER_ADDRESS_MODE_REPEAT },
+			{ fastgltf::Wrap::MirroredRepeat, VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT }
+		};
+
 		struct AABB {
 			glm::vec3 min{ std::numeric_limits<f32>::infinity() };
 			glm::vec3 max{ -std::numeric_limits<f32>::infinity() };
 		};
 
 		struct Image {
-			VkDeviceMemory memory = nullptr;
-			VkImage image = nullptr;
-			VkImageView view = nullptr;
+			VkDeviceMemory memory = {};
+			VkImage image = {};
+			VkImageView view = {};
 		};
 
 		struct Buffer {
-			VkDeviceMemory memory = nullptr;
-			VkBuffer buffer = nullptr;
+			VkDeviceMemory memory = {};
+			VkBuffer buffer = {};
 			union {
 				void* hostPtr = nullptr;
 				VkDeviceAddress devicePtr;
@@ -51,6 +68,8 @@ class Renderer {
 		struct Model {
 			std::vector<Image> images;
 			std::vector<VkSampler> samplers;
+			VkDescriptorPool texPool;
+			VkDescriptorSet texSet;
 			Buffer vertexBuffer;
 			Buffer indexBuffer;
 			Buffer indirectBuffer;
@@ -84,6 +103,7 @@ class Renderer {
 		VkInstance m_instance = {};
 		VkPhysicalDevice m_physicalDevice = {};
 		VkPhysicalDeviceMemoryProperties m_memProps;
+		u32 m_maxSampledImageDescriptors;
 		VkDevice m_device;
 
 		u32 m_graphicsQueueFamily;
@@ -98,24 +118,25 @@ class Renderer {
 		VkSwapchainKHR m_swapchain = {};
 		std::vector<VkImage> m_swapchainImages;
 
+		VkDescriptorSetLayout m_modelSetLayout = {};
 		VkPipelineLayout m_modelPipelineLayout = {};
 		VkPipeline m_modelPipeline = {};
 		
-		VkCommandPool m_transferPool;
-		VkCommandBuffer m_transferCmd;
+		VkCommandPool m_transferPool = {};
+		VkCommandBuffer m_transferCmd = {};
 
-		VkCommandPool m_computePool;
-		VkCommandBuffer m_computeCmd;
+		VkCommandPool m_computePool = {};
+		VkCommandBuffer m_computeCmd = {};
 
-		VkSemaphore m_mipSem;
+		VkSemaphore m_mipSem = {};
 
-		VkDescriptorSetLayout m_srgbSetLayout;
-		VkPipelineLayout m_srgbPipelineLayout;
-		VkPipeline m_srgbPipeline;
+		VkDescriptorSetLayout m_srgbSetLayout = {};
+		VkPipelineLayout m_srgbPipelineLayout = {};
+		VkPipeline m_srgbPipeline = {};
 
-		VkDescriptorSetLayout m_mipSetLayout;
-		VkPipelineLayout m_mipPipelineLayout;
-		VkPipeline m_mipPipeline;
+		VkDescriptorSetLayout m_mipSetLayout = {};
+		VkPipelineLayout m_mipPipelineLayout = {};
+		VkPipeline m_mipPipeline = {};
 
 		Image m_colorTarget;
 		Image m_depthTarget;

@@ -45,6 +45,10 @@ Renderer::Renderer() {
 	{
 		vkEnumeratePhysicalDevices(m_instance, ptr(1u), &m_physicalDevice);
 		vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &m_memProps);
+
+		VkPhysicalDeviceProperties props;
+		vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
+		m_maxSampledImageDescriptors = props.limits.maxPerStageDescriptorSampledImages;
 	}
 
 	// VkDevice and VkQueues
@@ -63,6 +67,7 @@ Renderer::Renderer() {
 					.dynamicRendering = true,
 				}),
 				.descriptorBindingVariableDescriptorCount = true,
+				.runtimeDescriptorArray = true,
 				.scalarBlockLayout = true,
 				.bufferDeviceAddress = true
 			}),
@@ -198,12 +203,28 @@ Renderer::Renderer() {
 		}), nullptr, &m_mipPipeline);
 	}
 
-	// VkPipelineLayout and VkPipeline
+	// VkDescriptorSetLayout, VkPipelineLayout, and VkPipeline
 	{
 		std::vector<u32> vsSrc = getShaderSource("shaders/model.vert.spv");
 		std::vector<u32> fsSrc = getShaderSource("shaders/model.frag.spv");
 
+		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+			.pNext = ptr(VkDescriptorSetLayoutBindingFlagsCreateInfo{
+				.bindingCount = 1,
+				.pBindingFlags = ptr<VkDescriptorBindingFlags>(VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)
+			}),
+			.bindingCount = 1,
+			.pBindings = ptr(VkDescriptorSetLayoutBinding{
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = m_maxSampledImageDescriptors,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			})
+		}), nullptr, &m_modelSetLayout);
+
 		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+			.setLayoutCount = 1,
+			.pSetLayouts = &m_modelSetLayout,
 			.pushConstantRangeCount = 1,
 			.pPushConstantRanges = ptr(VkPushConstantRange{
 				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
@@ -211,6 +232,7 @@ Renderer::Renderer() {
 				.size = sizeof(PushConstants)
 			})
 		}), nullptr, &m_modelPipelineLayout);
+
 		vkCreateGraphicsPipelines(m_device, nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
 			.pNext = ptr(VkPipelineRenderingCreateInfo{
 				.colorAttachmentCount = 1,
@@ -311,6 +333,7 @@ Renderer::~Renderer() {
 
 	vkDestroyPipeline(m_device, m_modelPipeline, nullptr);
 	vkDestroyPipelineLayout(m_device, m_modelPipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_device, m_modelSetLayout, nullptr);
 
 	destroyModel(m_model);
 
