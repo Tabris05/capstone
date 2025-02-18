@@ -70,18 +70,22 @@ class Renderer {
 			std::vector<VkSampler> samplers;
 			VkDescriptorPool texPool;
 			VkDescriptorSet texSet;
+			Buffer materialBuffer;
 			Buffer vertexBuffer;
 			Buffer indexBuffer;
 			Buffer indirectBuffer;
 			glm::mat4 baseTransform;
 			AABB aabb;
-			u64 numDrawCommands;
+			u64 numDrawCommands = 0;
 		};
 
 		struct PushConstants {
 			VkDeviceAddress vertexBuffer;
-			glm::mat4 transform;
+			VkDeviceAddress materialBuffer;
+			glm::mat4 modelTransform;
+			glm::mat4 cameraTransform;
 			glm::mat3 normalTransform;
+			glm::vec3 camPos;
 		};
 
 		struct {

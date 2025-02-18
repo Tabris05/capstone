@@ -41,7 +41,7 @@ Renderer::Renderer() {
 		volkLoadInstanceOnly(m_instance);
 	}
 
-	// VkPhysicalDevice and VkPhysicalDeviceMemoryProperties
+	// VkPhysicalDevice, VkPhysicalDeviceMemoryProperties, and VkPhysicalDeviceProperties::limits::maxPerStageDescriptorSampledImages
 	{
 		vkEnumeratePhysicalDevices(m_instance, ptr(1u), &m_physicalDevice);
 		vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &m_memProps);
@@ -57,19 +57,23 @@ Renderer::Renderer() {
 		m_computeQueueFamily = getQueue(VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT);
 		m_transferQueueFamily = getQueue(VK_QUEUE_TRANSFER_BIT, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 		vkCreateDevice(m_physicalDevice, ptr(VkDeviceCreateInfo{
-			.pNext = ptr(VkPhysicalDeviceVulkan12Features{
-				.pNext = ptr(VkPhysicalDeviceVulkan13Features{
-					.pNext = ptr(VkPhysicalDeviceVulkan14Features{
-						.maintenance5 = true,
-						.pushDescriptor = true
+			.pNext = ptr(VkPhysicalDeviceVulkan11Features{
+				.pNext = ptr(VkPhysicalDeviceVulkan12Features{
+					.pNext = ptr(VkPhysicalDeviceVulkan13Features{
+						.pNext = ptr(VkPhysicalDeviceVulkan14Features{
+							.maintenance5 = true,
+							.pushDescriptor = true
+						}),
+						.synchronization2 = true,
+						.dynamicRendering = true,
 					}),
-					.synchronization2 = true,
-					.dynamicRendering = true,
+					.shaderSampledImageArrayNonUniformIndexing = true,
+					.descriptorBindingVariableDescriptorCount = true,
+					.runtimeDescriptorArray = true,
+					.scalarBlockLayout = true,
+					.bufferDeviceAddress = true
 				}),
-				.descriptorBindingVariableDescriptorCount = true,
-				.runtimeDescriptorArray = true,
-				.scalarBlockLayout = true,
-				.bufferDeviceAddress = true
+				.shaderDrawParameters = true
 			}),
 			.queueCreateInfoCount = 3,
 			.pQueueCreateInfos = ptr({
@@ -90,9 +94,10 @@ Renderer::Renderer() {
 				}
 			}),
 			.enabledExtensionCount = 1,
-			.ppEnabledExtensionNames = ptr<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
+			.ppEnabledExtensionNames = ptr<const char*>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME }),
 			.pEnabledFeatures = ptr(VkPhysicalDeviceFeatures{ 
 				.multiDrawIndirect = true,
+				.drawIndirectFirstInstance = true,
 				.samplerAnisotropy = true
 			})
 		}), nullptr, &m_device);
@@ -227,9 +232,9 @@ Renderer::Renderer() {
 			.pSetLayouts = &m_modelSetLayout,
 			.pushConstantRangeCount = 1,
 			.pPushConstantRanges = ptr(VkPushConstantRange{
-				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 				.offset = 0,
-				.size = sizeof(PushConstants)
+				.size = sizeof(PushConstants),
 			})
 		}), nullptr, &m_modelPipelineLayout);
 

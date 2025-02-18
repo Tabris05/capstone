@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 #include "../shared/vertex.h"
+#include "../shared/material.h"
 #include <fastgltf/core.hpp>
 #include <fastgltf/glm_element_traits.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -8,7 +9,7 @@
 #include <stb/stb_image.h>
 #include <ranges>
 #include <execution>
-#include "tbrs/vk_util.hpp"
+#include <tbrs/vk_util.hpp>
 
 void Renderer::createModel(std::filesystem::path path) {
 	const fastgltf::Extensions extensions =
@@ -29,6 +30,7 @@ void Renderer::createModel(std::filesystem::path path) {
 	std::vector<Buffer> imageStagingBuffers;
 	std::vector<Image> images;
 	std::vector<VkSampler> samplers;
+	std::vector<Material> materials;
 	std::vector<Vertex> vertices;
 	std::vector<u32> indices;
 	std::vector<VkDrawIndexedIndirectCommand> drawCmds;
@@ -38,19 +40,54 @@ void Renderer::createModel(std::filesystem::path path) {
 
 	AABB aabb;
 
+	vkBeginCommandBuffer(m_transferCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	vkBeginCommandBuffer(m_computeCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+
 	for(const fastgltf::Material& mat : asset.materials) {
+		Material m = {
+			.baseColor = glm::make_vec4(mat.pbrData.baseColorFactor.data()),
+			.emissiveColor = glm::vec4(glm::make_vec3(mat.emissiveFactor.data()), mat.emissiveStrength),
+			.metallic = mat.pbrData.metallicFactor,
+			.roughness = mat.pbrData.roughnessFactor
+		};
+
 		if(mat.pbrData.baseColorTexture.has_value()) {
 			isSrgb[asset.textures[mat.pbrData.baseColorTexture.value().textureIndex].imageIndex.value()] = true;
+			m.albedoIndex = mat.pbrData.baseColorTexture.value().textureIndex;
+			m.texBitfield |= HAS_ALBEDO;
+		}
+
+		if(mat.normalTexture.has_value()) {
+			m.normalIndex = mat.normalTexture.value().textureIndex;
+			m.texBitfield |= HAS_NORMAL;
+		}
+
+		if(mat.occlusionTexture.has_value()) {
+			m.occlusionIndex = mat.occlusionTexture.value().textureIndex;
+			m.texBitfield |= HAS_OCCLUSION;
+		}
+
+		if(mat.pbrData.metallicRoughnessTexture.has_value()) {
+			m.metallicRoughnessIndex = mat.pbrData.metallicRoughnessTexture.value().textureIndex;
+			m.texBitfield |= HAS_METALLIC_ROUGHNESS;
 		}
 
 		if(mat.emissiveTexture.has_value()) {
 			isSrgb[asset.textures[mat.emissiveTexture.value().textureIndex].imageIndex.value()] = true;
+			m.emissiveIndex = mat.emissiveTexture.value().textureIndex;
+			m.texBitfield |= HAS_EMISSIVE;
 		}
+
+		materials.push_back(m);
 	}
 
+	const u64 materialBufferByteSize = materials.size() * sizeof(Material);
+	Buffer stagingMaterialBuffer = createBuffer(materialBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer materialBuffer = createBuffer(materialBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	
-	vkBeginCommandBuffer(m_transferCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
-	vkBeginCommandBuffer(m_computeCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	memcpy(stagingMaterialBuffer.hostPtr, materials.data(), materialBufferByteSize);
+
+	vkCmdCopyBuffer(m_transferCmd, stagingMaterialBuffer.buffer, materialBuffer.buffer, 1, ptr(VkBufferCopy{ .size = materialBufferByteSize }));
 
 	for(const auto& [idx, img] : std::views::enumerate(asset.images)) {
 		i32 width;
@@ -374,7 +411,8 @@ void Renderer::createModel(std::filesystem::path path) {
 					genTangSpaceDefault(&ctx);
 				}
 
-				drawCmds.emplace_back(indices.size() - oldIndicesSize, 1, oldIndicesSize, oldVerticesSize, 0);
+				VkDrawIndexedIndirectCommand cmd = { indices.size() - oldIndicesSize, 1, oldIndicesSize, oldVerticesSize, curPrimitive.materialIndex.value() };
+				drawCmds.push_back(cmd);
 			}
 		}
 		for(u64 i : curNode.children) {
@@ -434,6 +472,7 @@ void Renderer::createModel(std::filesystem::path path) {
 		destroyBuffer(i);
 	}
 
+	destroyBuffer(stagingMaterialBuffer);
 	destroyBuffer(stagingVertexBuffer);
 	destroyBuffer(stagingIndexBuffer);
 	destroyBuffer(stagingIndirectBuffer);
@@ -448,7 +487,7 @@ void Renderer::createModel(std::filesystem::path path) {
 
 	vkResetCommandPool(m_device, m_computePool, 0);
 
-	m_model = Model{ std::move(images), std::move(samplers), pool, set, vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, drawCmds.size() };
+	m_model = Model{ std::move(images), std::move(samplers), pool, set, materialBuffer, vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, drawCmds.size() };
 }
 
 void Renderer::destroyModel(Model model) {
@@ -462,6 +501,7 @@ void Renderer::destroyModel(Model model) {
 
 	vkDestroyDescriptorPool(m_device, model.texPool, nullptr);
 
+	destroyBuffer(model.materialBuffer);
 	destroyBuffer(model.vertexBuffer);
 	destroyBuffer(model.indexBuffer);
 	destroyBuffer(model.indirectBuffer);

@@ -59,5 +59,8 @@
     <ClInclude Include="shared\vertex.h">
       <Filter>Header Files\Shared</Filter>
     </ClInclude>
+    <ClInclude Include="shared\material.h">
+      <Filter>Header Files\Shared</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

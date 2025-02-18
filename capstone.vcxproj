@@ -167,6 +167,7 @@
     <ClCompile Include="src\renderer_util.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="shared\material.h" />
     <ClInclude Include="shared\vertex.h" />
     <ClInclude Include="src\renderer.hpp" />
   </ItemGroup>

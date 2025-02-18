@@ -1,3 +1,6 @@
+#ifndef VERTEX_H
+#define VERTEX_H
+
 #ifdef __cplusplus
     #include <glm/glm.hpp>
     #define GLM glm::
@@ -13,3 +16,5 @@ struct Vertex {
 };
 
 #undef GLM
+
+#endif

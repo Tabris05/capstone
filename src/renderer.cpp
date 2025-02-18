@@ -9,7 +9,7 @@ void Renderer::run() {
 		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
 		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
-		PushConstants pushConstants{ m_model.vertexBuffer.devicePtr, projection * view * model, glm::transpose(glm::inverse(model)) };
+		PushConstants pushConstants = { m_model.vertexBuffer.devicePtr, m_model.materialBuffer.devicePtr, model, projection * view, glm::transpose(glm::inverse(model)), m_position };
 
 		auto frameData = m_perFrameData[m_frameIndex];
 		vkWaitForFences(m_device, 1, &frameData.fence, true, std::numeric_limits<u64>::max());
@@ -82,7 +82,7 @@ void Renderer::run() {
 			vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
 			vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
 			vkCmdBindDescriptorSets(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 0, 1, &m_model.texSet, 0, nullptr);
-			vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
+			vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 
 			vkCmdEndRendering(frameData.cmdBuffer);
