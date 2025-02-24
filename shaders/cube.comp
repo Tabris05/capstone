@@ -6,8 +6,7 @@
 
 layout(binding = 0) uniform sampler2D equirectangularMap;
 
-//layout(r32ui, binding = 1) restrict writeonly uniform uimageCube outputTex;
-layout(rgba16f, binding = 1) restrict writeonly uniform imageCube outputTex;
+layout(r32ui, binding = 1) restrict writeonly uniform uimageCube outputTex;
 
 layout(local_size_x = 8, local_size_y = 8) in;
 void main() {
@@ -24,6 +23,5 @@ void main() {
 
 	vec2 uv = vec2(atan(pos.z, pos.x) * 0.5, asin(pos.y)) * INVPI + 0.5f;
 	uv.y = 1.0f - uv.y;
-	//imageStore(outputTex, ivec3(gl_GlobalInvocationID), uvec4(packe5bgr9(clamp(textureLod(equirectangularMap, uv, 0), 0.0f, 100.0f))));
-	imageStore(outputTex, ivec3(gl_GlobalInvocationID), clamp(textureLod(equirectangularMap, uv, 0), 0.0f, 100.0f));
+	imageStore(outputTex, ivec3(gl_GlobalInvocationID), uvec4(packe5bgr9(clamp(textureLod(equirectangularMap, uv, 0), 0.0f, 100.0f))));
 }

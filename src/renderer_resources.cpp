@@ -61,7 +61,7 @@ Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, Vk
 	
 	Image image;
 	vkCreateImage(m_device, ptr(VkImageCreateInfo{
-		.flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0u,
+		.flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT | VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT : 0u,
 		.imageType = VK_IMAGE_TYPE_2D,
 		.format = format,
 		.extent = { width, height, 1 },

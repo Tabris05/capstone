@@ -62,9 +62,7 @@ void Renderer::createSkybox(std::filesystem::path path) {
 		})
 	}), nullptr);
 
-	//Image uintCube = createImage(cubeSize, cubeSize, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT, 1, true);
-	Image uintCube = createImage(cubeSize, cubeSize, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, true);
-	//Image cube = createImage(cubeSize, cubeSize, VK_FORMAT_E5B9G9R9_UFLOAT_PACK32, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, true);
+	Image cube = createImage(cubeSize, cubeSize, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, true);
 
 	vkBeginCommandBuffer(m_computeCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 	vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
@@ -78,7 +76,7 @@ void Renderer::createSkybox(std::filesystem::path path) {
 			.newLayout = VK_IMAGE_LAYOUT_GENERAL,
 			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.image = uintCube.image,
+			.image = cube.image,
 			.subresourceRange = colorSubresourceRange()
 		})
 	}));
@@ -99,64 +97,13 @@ void Renderer::createSkybox(std::filesystem::path path) {
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.pImageInfo = ptr(VkDescriptorImageInfo{
-				.imageView = uintCube.view,
+				.imageView = cube.view,
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 			})
 		}
 	}));
 	vkCmdDispatch(m_computeCmd, (cubeSize + 7) / 8, (cubeSize + 7) / 8, 6);
 
-	//vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
-	//	.imageMemoryBarrierCount = 2,
-	//	.pImageMemoryBarriers = ptr({
-	//		VkImageMemoryBarrier2{
-	//			.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-	//			.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-	//			.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-	//			.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-	//			.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-	//			.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-	//			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	//			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	//			.image = uintCube.image,
-	//			.subresourceRange = colorSubresourceRange()
-	//		},
-	//		VkImageMemoryBarrier2{
-	//			.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-	//			.srcAccessMask = VK_ACCESS_2_NONE,
-	//			.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-	//			.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-	//			.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-	//			.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-	//			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	//			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	//			.image = cube.image,
-	//			.subresourceRange = colorSubresourceRange()
-	//		},
-	//	})
-	//}));
-	//
-	//vkCmdCopyImage(m_computeCmd, uintCube.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, cube.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, ptr(VkImageCopy{
-	//	.srcSubresource = colorSubresourceLayers(),
-	//	.dstSubresource = colorSubresourceLayers(),
-	//	.extent = { static_cast<u32>(cubeSize), static_cast<u32>(cubeSize), 1 }
-	//}));
-	//
-	//vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
-	//	.imageMemoryBarrierCount = 1,
-	//	.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-	//		.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-	//		.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-	//		.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-	//		.dstAccessMask = VK_ACCESS_2_NONE,
-	//		.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-	//		.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-	//		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	//		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	//		.image = cube.image,
-	//		.subresourceRange = colorSubresourceRange()
-	//	})
-	//}));
 	vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
 		.imageMemoryBarrierCount = 1,
 		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
@@ -168,10 +115,10 @@ void Renderer::createSkybox(std::filesystem::path path) {
 			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.image = uintCube.image,
+			.image = cube.image,
 			.subresourceRange = colorSubresourceRange()
 		})
-	}));
+		}));
 
 	vkEndCommandBuffer(m_computeCmd);
 
@@ -192,10 +139,18 @@ void Renderer::createSkybox(std::filesystem::path path) {
 	vkQueueWaitIdle(m_computeQueue);
 	vkResetCommandPool(m_device, m_computePool, 0);
 	destroyImage(srcImg);
-	//destroyImage(uintCube);
 
-	//m_skybox = Skybox{ cube };
-	m_skybox = Skybox{ uintCube };
+	vkDestroyImageView(m_device, cube.view, nullptr);
+
+	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		.pNext = ptr(VkImageViewUsageCreateInfo{ .usage = VK_IMAGE_USAGE_SAMPLED_BIT }),
+		.image = cube.image,
+		.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+		.format = VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
+		.subresourceRange = colorSubresourceRange()
+	}), nullptr, &cube.view);
+
+	m_skybox = Skybox{ cube };
 }
 
 void Renderer::destroySkybox(Skybox skybox) {
