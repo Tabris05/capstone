@@ -48,7 +48,7 @@ void Renderer::recreateSwapchain() {
 	m_swapchainDirty = false;
 }
 
-Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage, u32 mips) {
+Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage, u32 mips, b8 cube) {
 	
 	VkSharingMode mode = VK_SHARING_MODE_EXCLUSIVE;
 	std::vector<u32> queueFamilies{ m_graphicsQueueFamily };
@@ -61,13 +61,13 @@ Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, Vk
 	
 	Image image;
 	vkCreateImage(m_device, ptr(VkImageCreateInfo{
+		.flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0u,
 		.imageType = VK_IMAGE_TYPE_2D,
 		.format = format,
 		.extent = { width, height, 1 },
 		.mipLevels = mips,
-		.arrayLayers = 1,
+		.arrayLayers = cube ? 6u : 1u,
 		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.tiling = VK_IMAGE_TILING_OPTIMAL,
 		.usage = usage,
 		.sharingMode = mode,
 		.queueFamilyIndexCount = static_cast<u32>(queueFamilies.size()),
@@ -84,7 +84,7 @@ Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, Vk
 
 	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
 		.image = image.image,
-		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.viewType = cube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D,
 		.format = format,
 		.subresourceRange = (format < 124 || format > 130) ? colorSubresourceRange() : depthSubresourceRange()
 	}), nullptr, &image.view);
@@ -130,4 +130,69 @@ Renderer::Buffer Renderer::createBuffer(u64 size, VkBufferUsageFlags usage, VkMe
 void Renderer::destroyBuffer(Buffer buffer) {
 	vkDestroyBuffer(m_device, buffer.buffer, nullptr);
 	vkFreeMemory(m_device, buffer.memory, nullptr);
+}
+
+VkPipeline Renderer::createComputePipeline(VkPipelineLayout layout, std::filesystem::path shaderPath) {
+	VkPipeline ret;
+
+	std::vector<u32> shaderSrc = getShaderSource(shaderPath);
+
+	vkCreateComputePipelines(m_device, nullptr, 1, ptr(VkComputePipelineCreateInfo{
+		.stage = {
+			.pNext = ptr(VkShaderModuleCreateInfo{
+				.codeSize = shaderSrc.size() * sizeof(u32),
+				.pCode = shaderSrc.data()
+			}),
+			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+			.pName = "main"
+		},
+		.layout = layout
+	}), nullptr, &ret);
+
+	return ret;
+}
+
+VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath) {
+	VkPipeline ret;
+
+	std::vector<u32> vsSrc = getShaderSource(vsPath);
+	std::vector<u32> fsSrc = getShaderSource(fsPath);
+
+	vkCreateGraphicsPipelines(m_device, nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
+		.pNext = ptr(VkPipelineRenderingCreateInfo{
+			.colorAttachmentCount = 1,
+			.pColorAttachmentFormats = &m_colorFormat,
+			.depthAttachmentFormat = m_depthFormat
+		}),
+		.stageCount = 2,
+		.pStages = ptr({
+			VkPipelineShaderStageCreateInfo{
+				.pNext = ptr(VkShaderModuleCreateInfo{
+					.codeSize = vsSrc.size() * sizeof(u32),
+					.pCode = vsSrc.data()
+				}),
+				.stage = VK_SHADER_STAGE_VERTEX_BIT,
+				.pName = "main"
+			},
+			VkPipelineShaderStageCreateInfo{
+				.pNext = ptr(VkShaderModuleCreateInfo{
+					.codeSize = fsSrc.size() * sizeof(u32),
+					.pCode = fsSrc.data()
+				}),
+				.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+				.pName = "main"
+			},
+		}),
+		.pVertexInputState = ptr(VkPipelineVertexInputStateCreateInfo{}),
+		.pInputAssemblyState = ptr(VkPipelineInputAssemblyStateCreateInfo{.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST }),
+		.pViewportState = ptr(VkPipelineViewportStateCreateInfo{.viewportCount = 1, .scissorCount = 1 }),
+		.pRasterizationState = ptr(VkPipelineRasterizationStateCreateInfo{.cullMode = VK_CULL_MODE_BACK_BIT, .lineWidth = 1.0f }),
+		.pMultisampleState = ptr(VkPipelineMultisampleStateCreateInfo{.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT }),
+		.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = VK_COMPARE_OP_GREATER }),
+		.pColorBlendState = ptr(VkPipelineColorBlendStateCreateInfo{.attachmentCount = 1, .pAttachments = ptr(VkPipelineColorBlendAttachmentState{.colorWriteMask = colorComponentAll() })}),
+		.pDynamicState = ptr(VkPipelineDynamicStateCreateInfo{.dynamicStateCount = 2, .pDynamicStates = ptr({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }) }),
+		.layout = layout
+	}), nullptr, &ret);
+
+	return ret;
 }

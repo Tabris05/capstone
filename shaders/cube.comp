@@ -1,0 +1,29 @@
+#version 460
+
+#include "e5bgr9utils.h"
+
+#define INVPI 0.318309f
+
+layout(binding = 0) uniform sampler2D equirectangularMap;
+
+//layout(r32ui, binding = 1) restrict writeonly uniform uimageCube outputTex;
+layout(rgba16f, binding = 1) restrict writeonly uniform imageCube outputTex;
+
+layout(local_size_x = 8, local_size_y = 8) in;
+void main() {
+	vec3 pos = 2.0f * vec3(gl_GlobalInvocationID.xy / vec2(imageSize(outputTex)), 1.0f) - 1.0f;
+	vec3 faces[6] = {
+		vec3( pos.z, -pos.y, -pos.x),
+		vec3(-pos.z, -pos.y,  pos.x),
+		vec3( pos.x,  pos.z,  pos.y),
+		vec3( pos.x, -pos.z, -pos.y),
+		vec3( pos.x, -pos.y,  pos.z),
+		vec3(-pos.x, -pos.y, -pos.z)
+	};
+	pos = normalize(faces[gl_GlobalInvocationID.z]);
+
+	vec2 uv = vec2(atan(pos.z, pos.x) * 0.5, asin(pos.y)) * INVPI + 0.5f;
+	uv.y = 1.0f - uv.y;
+	//imageStore(outputTex, ivec3(gl_GlobalInvocationID), uvec4(packe5bgr9(clamp(textureLod(equirectangularMap, uv, 0), 0.0f, 100.0f))));
+	imageStore(outputTex, ivec3(gl_GlobalInvocationID), clamp(textureLod(equirectangularMap, uv, 0), 0.0f, 100.0f));
+}

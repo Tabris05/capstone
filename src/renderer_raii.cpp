@@ -1,6 +1,5 @@
 #include "renderer.hpp"
 #include <tbrs/vk_util.hpp>
-#include <nfd/nfd.h>
 #include <nfd/nfd_glfw3.h>
 #include "../shared/vertex.h"
 
@@ -22,6 +21,7 @@ Renderer::Renderer() {
 		});
 
 		NFD_Init();
+		NFD_GetNativeWindowFromGLFWWindow(m_window, &m_nativeHandle);
 	}
 
 	// volk and VkInstance
@@ -118,9 +118,6 @@ Renderer::Renderer() {
 
 	// transfer objects
 	{
-		std::vector<u32> srgbSrc = getShaderSource("shaders/srgb.comp.spv");
-		std::vector<u32> mipSrc = getShaderSource("shaders/mip.comp.spv");
-
 		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
 			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
 			.queueFamilyIndex = m_transferQueueFamily
@@ -141,8 +138,11 @@ Renderer::Renderer() {
 			.commandBufferCount = 1
 		}), &m_computeCmd);
 
-		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_mipSem);
+		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_transferToComputeSem);
+	}
 
+	// transfer pipeline layouts
+	{
 		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
 			.bindingCount = 1,
@@ -152,24 +152,12 @@ Renderer::Renderer() {
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
 			})
-		}), nullptr, &m_srgbSetLayout);
+		}), nullptr, &m_oneImageSetLayout);
 
 		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
-			.pSetLayouts = &m_srgbSetLayout
-		}), nullptr, &m_srgbPipelineLayout);
-
-		vkCreateComputePipelines(m_device, nullptr, 1, ptr(VkComputePipelineCreateInfo{
-			.stage = {
-				.pNext = ptr(VkShaderModuleCreateInfo{
-					.codeSize = srgbSrc.size() * sizeof(u32),
-					.pCode = srgbSrc.data()
-				}),
-				.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-				.pName = "main"
-			},
-			.layout = m_srgbPipelineLayout
-		}), nullptr, &m_srgbPipeline);
+			.pSetLayouts = &m_oneImageSetLayout
+		}), nullptr, &m_oneImagePipelineLayout);
 
 		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
@@ -188,31 +176,60 @@ Renderer::Renderer() {
 					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
 				}
 			})
-		}), nullptr, &m_mipSetLayout);
+		}), nullptr, &m_twoImageSetLayout);
 
 		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
-			.pSetLayouts = &m_mipSetLayout
-		}), nullptr, &m_mipPipelineLayout);
+			.pSetLayouts = &m_twoImageSetLayout
+		}), nullptr, &m_twoImagePipelineLayout);
 
-		vkCreateComputePipelines(m_device, nullptr, 1, ptr(VkComputePipelineCreateInfo{
-			.stage = {
-				.pNext = ptr(VkShaderModuleCreateInfo{
-					.codeSize = mipSrc.size() * sizeof(u32),
-					.pCode = mipSrc.data()
-				}),
-				.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-				.pName = "main"
-			},
-			.layout = m_mipPipelineLayout
-		}), nullptr, &m_mipPipeline);
+		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
+			.bindingCount = 2,
+			.pBindings = ptr({
+				VkDescriptorSetLayoutBinding{
+					.binding = 0,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+				},
+				VkDescriptorSetLayoutBinding{
+					.binding = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+				}
+			})
+		}), nullptr, &m_oneTexOneImageSetLayout);
+
+		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+			.setLayoutCount = 1,
+			.pSetLayouts = &m_oneTexOneImageSetLayout
+		}), nullptr, &m_oneTexOneImagePipelineLayout);
 	}
 
-	// VkDescriptorSetLayout, VkPipelineLayout, and VkPipeline
+	// transfer pipelines
 	{
-		std::vector<u32> vsSrc = getShaderSource("shaders/model.vert.spv");
-		std::vector<u32> fsSrc = getShaderSource("shaders/model.frag.spv");
+		m_srgbPipeline = createComputePipeline(m_oneImagePipelineLayout, "shaders/srgb.comp.spv");
+		m_mipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/mip.comp.spv");
+		m_cubePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/cube.comp.spv");
+	}
 
+	// skybox VkSampler
+	{
+		vkCreateSampler(m_device, ptr(VkSamplerCreateInfo{
+			.magFilter = VK_FILTER_LINEAR,
+			.minFilter = VK_FILTER_LINEAR,
+			.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.anisotropyEnable = true,
+			.maxAnisotropy = 16,
+		}), nullptr, &m_skyboxSampler);
+	}
+
+	// Model Pipeline
+	{
 		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
 			.pNext = ptr(VkDescriptorSetLayoutBindingFlagsCreateInfo{
 				.bindingCount = 1,
@@ -238,59 +255,66 @@ Renderer::Renderer() {
 			})
 		}), nullptr, &m_modelPipelineLayout);
 
-		vkCreateGraphicsPipelines(m_device, nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
-			.pNext = ptr(VkPipelineRenderingCreateInfo{
-				.colorAttachmentCount = 1,
-				.pColorAttachmentFormats = &m_colorFormat,
-				.depthAttachmentFormat = m_depthFormat
-			}),
-			.stageCount = 2,
-			.pStages = ptr({
-				VkPipelineShaderStageCreateInfo{
-					.pNext = ptr(VkShaderModuleCreateInfo{
-						.codeSize = vsSrc.size() * sizeof(u32),
-						.pCode = vsSrc.data()
-					}),
-					.stage = VK_SHADER_STAGE_VERTEX_BIT,
-					.pName = "main"
-				},
-				VkPipelineShaderStageCreateInfo{
-					.pNext = ptr(VkShaderModuleCreateInfo{
-						.codeSize = fsSrc.size() * sizeof(u32),
-						.pCode = fsSrc.data()
-					}),
-					.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-					.pName = "main"
-				},
-			}),
-			.pVertexInputState = ptr(VkPipelineVertexInputStateCreateInfo{}),
-			.pInputAssemblyState = ptr(VkPipelineInputAssemblyStateCreateInfo{ .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST }),
-			.pViewportState = ptr(VkPipelineViewportStateCreateInfo{ .viewportCount = 1, .scissorCount = 1 }),
-			.pRasterizationState = ptr(VkPipelineRasterizationStateCreateInfo{ .cullMode = VK_CULL_MODE_NONE, .lineWidth = 1.0f }),
-			.pMultisampleState = ptr(VkPipelineMultisampleStateCreateInfo{ .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT }),
-			.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = VK_COMPARE_OP_GREATER }),
-			.pColorBlendState = ptr(VkPipelineColorBlendStateCreateInfo{ .attachmentCount = 1, .pAttachments = ptr(VkPipelineColorBlendAttachmentState{ .colorWriteMask = colorComponentAll() })}),
-			.pDynamicState = ptr(VkPipelineDynamicStateCreateInfo{ .dynamicStateCount = 2, .pDynamicStates = ptr({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }) }),
-			.layout = m_modelPipelineLayout
-		}), nullptr, &m_modelPipeline);
+		m_modelPipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/model.vert.spv", "shaders/model.frag.spv");
+	}
+
+	// Skybox Pipeline
+	{
+		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
+			.bindingCount = 1,
+			.pBindings = ptr(VkDescriptorSetLayoutBinding{
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			})
+		}), nullptr, &m_skyboxSetLayout);
+
+		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+			.setLayoutCount = 1,
+			.pSetLayouts = &m_skyboxSetLayout,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = ptr(VkPushConstantRange{
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+				.offset = 0,
+				.size = sizeof(glm::mat4),
+			})
+		}), nullptr, &m_skyboxPipelineLayout);
+
+		m_skyboxPipeline = createGraphicsPipeline(m_skyboxPipelineLayout, "shaders/skybox.vert.spv", "shaders/skybox.frag.spv");
 	}
 
 	// Load Model
 	{
 		nfdu8char_t* outPath;
-		nfdwindowhandle_t nativeWindow = {};
-		NFD_GetNativeWindowFromGLFWWindow(m_window, &nativeWindow);
 
-		nfdu8filteritem_t filters[2] = { { "glTF Binary", "glb" }, { "glTF Seperate", "gltf" } };
 		nfdopendialogu8args_t args = { 0 };
 		nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
 			.filterList = ptr({ nfdu8filteritem_t{ "glTF Binary", "glb" }, nfdu8filteritem_t{ "glTF Seperate", "gltf" } }),
 			.filterCount = 2,
-			.parentWindow = nativeWindow
+			.parentWindow = m_nativeHandle
 		}));
 
 		if(result == NFD_OKAY) {
 			createModel(outPath);
+			NFD_FreePathU8(outPath);
+		}
+	}
+
+	// Load Environment Map
+	{
+		nfdu8char_t* outPath;
+
+		nfdopendialogu8args_t args = { 0 };
+		nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
+			.filterList = ptr(nfdu8filteritem_t{ "Environment Map", "hdr" }),
+			.filterCount = 1,
+			.parentWindow = m_nativeHandle
+		}));
+
+		if(result == NFD_OKAY) {
+			createSkybox(outPath);
 			NFD_FreePathU8(outPath);
 		}
 	}
@@ -326,20 +350,31 @@ Renderer::~Renderer() {
 
 	vkDestroyCommandPool(m_device, m_transferPool, nullptr);
 	vkDestroyCommandPool(m_device, m_computePool, nullptr);
-	vkDestroySemaphore(m_device, m_mipSem, nullptr);
+	vkDestroySemaphore(m_device, m_transferToComputeSem, nullptr);
 
+	vkDestroyPipeline(m_device, m_cubePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_mipPipeline, nullptr);
-	vkDestroyPipelineLayout(m_device, m_mipPipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_device, m_mipSetLayout, nullptr);
-
 	vkDestroyPipeline(m_device, m_srgbPipeline, nullptr);
-	vkDestroyPipelineLayout(m_device, m_srgbPipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_device, m_srgbSetLayout, nullptr);
+
+	vkDestroyPipelineLayout(m_device, m_oneTexOneImagePipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_device, m_oneTexOneImageSetLayout, nullptr);
+
+	vkDestroyPipelineLayout(m_device, m_twoImagePipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_device, m_twoImageSetLayout, nullptr);
+
+	vkDestroyPipelineLayout(m_device, m_oneImagePipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_device, m_oneImageSetLayout, nullptr);
+
+	vkDestroyPipeline(m_device, m_skyboxPipeline, nullptr);
+	vkDestroyPipelineLayout(m_device, m_skyboxPipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_device, m_skyboxSetLayout, nullptr);
 
 	vkDestroyPipeline(m_device, m_modelPipeline, nullptr);
 	vkDestroyPipelineLayout(m_device, m_modelPipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_modelSetLayout, nullptr);
 
+	vkDestroySampler(m_device, m_skyboxSampler, nullptr);
+	destroySkybox(m_skybox);
 	destroyModel(m_model);
 
 	destroyImage(m_colorTarget);

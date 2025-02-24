@@ -9,6 +9,8 @@ void Renderer::run() {
 		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
 		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
+		glm::mat4 camMatrixNoTranslation = projection * glm::mat4(glm::mat3(view));
+
 		PushConstants pushConstants = { m_model.vertexBuffer.devicePtr, m_model.materialBuffer.devicePtr, model, projection * view, glm::transpose(glm::inverse(model)), m_position };
 
 		auto frameData = m_perFrameData[m_frameIndex];
@@ -56,37 +58,54 @@ void Renderer::run() {
 			})
 		}));
 
-		if(m_model.numDrawCommands > 0) {
-			vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
-				.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
-				.layerCount = 1,
-				.colorAttachmentCount = 1,
-				.pColorAttachments = ptr(VkRenderingAttachmentInfo{
-					.imageView = m_colorTarget.view,
-					.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-					.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-					.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-					.clearValue = { 0.0f, 0.0f, 0.0f, 1.0f }
-				}),
-				.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-					.imageView = m_depthTarget.view,
-					.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-					.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-					.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-					.clearValue = { 0.0f }
-				})
-			}));
+		
+		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
+			.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
+			.layerCount = 1,
+			.colorAttachmentCount = 1,
+			.pColorAttachments = ptr(VkRenderingAttachmentInfo{
+				.imageView = m_colorTarget.view,
+				.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				.clearValue = { 0.0f, 0.0f, 0.0f, 1.0f }
+			}),
+			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
+				.imageView = m_depthTarget.view,
+				.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.clearValue = { 0.0f }
+			})
+		}));
+		
+		vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
+		vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
 
+		if(m_model.numDrawCommands > 0) {
 			vkCmdBindIndexBuffer(frameData.cmdBuffer, m_model.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipeline);
-			vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
-			vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
 			vkCmdBindDescriptorSets(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 0, 1, &m_model.texSet, 0, nullptr);
 			vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
-
-			vkCmdEndRendering(frameData.cmdBuffer);
 		}
+
+		if(m_skybox.environmentMap.image != VkImage{}) {
+			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipeline);
+			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.pImageInfo = ptr(VkDescriptorImageInfo{
+					.sampler = m_skyboxSampler,
+					.imageView = m_skybox.environmentMap.view,
+					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				})
+			}));
+			vkCmdPushConstants(frameData.cmdBuffer, m_skyboxPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &camMatrixNoTranslation);
+			vkCmdDraw(frameData.cmdBuffer, 36, 1, 0, 0);
+		}
+
+		vkCmdEndRendering(frameData.cmdBuffer);
 
 		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 2,

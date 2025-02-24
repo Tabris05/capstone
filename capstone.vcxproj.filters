@@ -51,6 +51,9 @@
     <ClCompile Include="include\stb\stb_image.c">
       <Filter>Source Files\Dependencies</Filter>
     </ClCompile>
+    <ClCompile Include="src\renderer_skybox.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\renderer.hpp">

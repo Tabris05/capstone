@@ -159,7 +159,7 @@ void Renderer::createModel(std::filesystem::path path) {
 
 		if(isSrgb[idx]) {
 			vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_srgbPipeline);
-			vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_srgbPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+			vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 				.pImageInfo = ptr(VkDescriptorImageInfo{
@@ -197,7 +197,7 @@ void Renderer::createModel(std::filesystem::path path) {
 				.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 }
 			}), nullptr, &curMipView);
 
-			vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_mipPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+			vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_twoImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
 				.descriptorCount = 2,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 				.pImageInfo = ptr({
@@ -451,19 +451,24 @@ void Renderer::createModel(std::filesystem::path path) {
 	vkEndCommandBuffer(m_transferCmd);
 
 
-	vkQueueSubmit(m_transferQueue, 1, ptr(VkSubmitInfo{
-		.commandBufferCount = 1,
-		.pCommandBuffers = &m_transferCmd,
-		.signalSemaphoreCount = 1,
-		.pSignalSemaphores = &m_mipSem
+	vkQueueSubmit2(m_transferQueue, 1, ptr(VkSubmitInfo2{
+		.commandBufferInfoCount = 1,
+		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmd }),
+		.signalSemaphoreInfoCount = 1,
+		.pSignalSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
+			.semaphore = m_transferToComputeSem,
+			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+		})
 	}), nullptr);
 
-	vkQueueSubmit(m_computeQueue, 1, ptr(VkSubmitInfo{
-		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &m_mipSem,
-		.pWaitDstStageMask = ptr<VkPipelineStageFlags>(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT),
-		.commandBufferCount = 1,
-		.pCommandBuffers = &m_computeCmd
+	vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
+		.waitSemaphoreInfoCount = 1,
+		.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
+			.semaphore = m_transferToComputeSem,
+			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+		}),
+		.commandBufferInfoCount = 1,
+		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmd })
 	}), nullptr);
 
 	vkQueueWaitIdle(m_transferQueue);

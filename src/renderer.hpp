@@ -10,6 +10,7 @@
 #include <limits>
 #include <unordered_map>
 #include <fastgltf/types.hpp>
+#include <nfd/nfd.h>
 
 class Renderer {
 	public:
@@ -68,8 +69,8 @@ class Renderer {
 		struct Model {
 			std::vector<Image> images;
 			std::vector<VkSampler> samplers;
-			VkDescriptorPool texPool;
-			VkDescriptorSet texSet;
+			VkDescriptorPool texPool = {};
+			VkDescriptorSet texSet = {};
 			Buffer materialBuffer;
 			Buffer vertexBuffer;
 			Buffer indexBuffer;
@@ -77,6 +78,10 @@ class Renderer {
 			glm::mat4 baseTransform;
 			AABB aabb;
 			u64 numDrawCommands = 0;
+		};
+
+		struct Skybox {
+			Image environmentMap;
 		};
 
 		struct PushConstants {
@@ -100,6 +105,7 @@ class Renderer {
 		i32 m_width;
 		i32 m_height;
 		GLFWwindow* m_window;
+		nfdwindowhandle_t m_nativeHandle;
 
 		u8 m_frameIndex = 0;
 		b8 m_swapchainDirty = false;
@@ -125,6 +131,10 @@ class Renderer {
 		VkDescriptorSetLayout m_modelSetLayout = {};
 		VkPipelineLayout m_modelPipelineLayout = {};
 		VkPipeline m_modelPipeline = {};
+
+		VkDescriptorSetLayout m_skyboxSetLayout = {};
+		VkPipelineLayout m_skyboxPipelineLayout = {};
+		VkPipeline m_skyboxPipeline = {};
 		
 		VkCommandPool m_transferPool = {};
 		VkCommandBuffer m_transferCmd = {};
@@ -132,30 +142,38 @@ class Renderer {
 		VkCommandPool m_computePool = {};
 		VkCommandBuffer m_computeCmd = {};
 
-		VkSemaphore m_mipSem = {};
+		VkSemaphore m_transferToComputeSem = {};
 
-		VkDescriptorSetLayout m_srgbSetLayout = {};
-		VkPipelineLayout m_srgbPipelineLayout = {};
+		VkDescriptorSetLayout m_oneImageSetLayout = {};
+		VkPipelineLayout m_oneImagePipelineLayout = {};
+
+		VkDescriptorSetLayout m_twoImageSetLayout = {};
+		VkPipelineLayout m_twoImagePipelineLayout = {};
+
+		VkDescriptorSetLayout m_oneTexOneImageSetLayout = {};
+		VkPipelineLayout m_oneTexOneImagePipelineLayout = {};
+		
 		VkPipeline m_srgbPipeline = {};
-
-		VkDescriptorSetLayout m_mipSetLayout = {};
-		VkPipelineLayout m_mipPipelineLayout = {};
 		VkPipeline m_mipPipeline = {};
+		VkPipeline m_cubePipeline = {};
 
 		Image m_colorTarget;
 		Image m_depthTarget;
 		Model m_model;
+
+		Skybox m_skybox;
+		VkSampler m_skyboxSampler;
 
 		f32 m_fov = 90.0f;
 		glm::vec3 m_position{ 0.0f, 0.0f, -2.0f };
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
 		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);
-		std::vector<u32> getShaderSource(const char* path);
+		std::vector<u32> getShaderSource(std::filesystem::path);
 		void createSwapchain();
 		void recreateSwapchain();
 
-		Image createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage, u32 mips = 1);
+		Image createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage, u32 mips = 1, b8 cube = false);
 		void destroyImage(Image image);
 
 		Buffer createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps);
@@ -163,6 +181,12 @@ class Renderer {
 
 		void createModel(std::filesystem::path path);
 		void destroyModel(Model model);
+
+		void createSkybox(std::filesystem::path path);
+		void destroySkybox(Skybox skybox);
+
+		VkPipeline createComputePipeline(VkPipelineLayout layout, std::filesystem::path shaderPath);
+		VkPipeline createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath);
 };
 
 #endif

@@ -164,6 +164,7 @@
     <ClCompile Include="src\renderer_model.cpp" />
     <ClCompile Include="src\renderer_raii.cpp" />
     <ClCompile Include="src\renderer_resources.cpp" />
+    <ClCompile Include="src\renderer_skybox.cpp" />
     <ClCompile Include="src\renderer_util.cpp" />
   </ItemGroup>
   <ItemGroup>

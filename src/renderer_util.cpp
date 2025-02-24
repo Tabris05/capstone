@@ -28,7 +28,7 @@ u32 Renderer::getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask) {
 	}
 }
 
-std::vector<u32> Renderer::getShaderSource(const char* path) {
+std::vector<u32> Renderer::getShaderSource(std::filesystem::path path) {
 	std::ifstream file(path, std::ios::binary | std::ios::ate);
 	std::vector<u32> ret(file.tellg() / sizeof(u32));
 	file.seekg(0);
