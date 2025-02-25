@@ -58,7 +58,6 @@ void Renderer::run() {
 			})
 		}));
 
-		
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
 			.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
 			.layerCount = 1,
