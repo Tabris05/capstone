@@ -1,0 +1,18 @@
+#version 460
+
+#include "utils.h"
+
+layout(r32ui, binding = 0) uniform restrict readonly uimageCube lowerMip;
+layout(r32ui, binding = 1) uniform restrict writeonly uimageCube higherMip;
+
+layout(local_size_x = 8, local_size_y = 8) in;
+void main() {
+    vec4 pixel = vec4(0.0f);
+
+    pixel += unpacke5bgr9(imageLoad(lowerMip, ivec3(gl_GlobalInvocationID.xy * 2 + uvec2(0, 0), gl_GlobalInvocationID.z)).r);
+    pixel += unpacke5bgr9(imageLoad(lowerMip, ivec3(gl_GlobalInvocationID.xy * 2 + uvec2(0, 1), gl_GlobalInvocationID.z)).r);
+    pixel += unpacke5bgr9(imageLoad(lowerMip, ivec3(gl_GlobalInvocationID.xy * 2 + uvec2(1, 0), gl_GlobalInvocationID.z)).r);
+    pixel += unpacke5bgr9(imageLoad(lowerMip, ivec3(gl_GlobalInvocationID.xy * 2 + uvec2(1, 1), gl_GlobalInvocationID.z)).r);
+
+    imageStore(higherMip, ivec3(gl_GlobalInvocationID), uvec4(packe5bgr9(pixel / 4.0f)));
+}

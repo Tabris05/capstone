@@ -28,6 +28,8 @@ class Renderer {
 
 	private:
 		static constexpr u8 m_framesInFlight = 2;
+		static constexpr u32 m_irradianceMapSize = 32;
+		static constexpr u32 m_brdfIntegralLUTSize = 1024;
 		static constexpr VkFormat m_colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
 		static constexpr VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
 
@@ -82,6 +84,8 @@ class Renderer {
 
 		struct Skybox {
 			Image environmentMap;
+			Image irradianceMap;
+			Image radianceMap;
 		};
 
 		struct PushConstants {
@@ -129,6 +133,7 @@ class Renderer {
 		std::vector<VkImage> m_swapchainImages;
 
 		VkDescriptorSetLayout m_modelSetLayout = {};
+		VkDescriptorSetLayout m_IBLSetLayout = {};
 		VkPipelineLayout m_modelPipelineLayout = {};
 		VkPipeline m_modelPipeline = {};
 
@@ -156,12 +161,17 @@ class Renderer {
 		VkPipeline m_srgbPipeline = {};
 		VkPipeline m_mipPipeline = {};
 		VkPipeline m_cubePipeline = {};
+		VkPipeline m_cubeMipPipeline = {};
+		VkPipeline m_irradiancePipeline = {};
+		VkPipeline m_radiancePipeline = {};
+		VkPipeline m_brdfIntegralPipeline = {};
 
 		Image m_colorTarget;
 		Image m_depthTarget;
 		Model m_model;
 
 		Skybox m_skybox;
+		Image m_brdfIntegralTex;
 		VkSampler m_skyboxSampler;
 
 		f32 m_fov = 90.0f;

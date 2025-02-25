@@ -21,3 +21,16 @@ u32 packe5bgr9(vec4 color) {
 
     return (u32(exp) << 27) | (b << 18) | (g << 9) | r;
 }
+
+vec4 unpacke5bgr9(u32 color) {
+    f32 exp = f32(color >> 27);
+    f32 r = f32(color & 0x1FF);
+    f32 g = f32((color >> 9) & 0x1FF);
+    f32 b = f32((color >> 18) & 0x1FF);
+
+    return vec4(vec3(r, g, b) * exp2(exp - 15.0f) / 511.0f, 1.0f);
+}
+
+f32 countMips(ivec2 dimensions) {
+    return floor(log2(max(dimensions.x, dimensions.y))) + 1.0f;
+}

@@ -213,7 +213,7 @@ void Renderer::createModel(std::filesystem::path path) {
 			}));
 			mipViews.push_back(curMipView);
 
-			vkCmdDispatch(m_computeCmd, (std::max(width / (1 << i), 1) + 7) / 8, (std::max(height / (1 << i), 1) + 7) / 8, 1);
+			vkCmdDispatch(m_computeCmd, (std::max(width >> i, 1) + 7) / 8, (std::max(height >> i, 1) + 7) / 8, 1);
 
 			vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
 				.imageMemoryBarrierCount = 1,

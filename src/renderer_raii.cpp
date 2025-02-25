@@ -48,7 +48,7 @@ Renderer::Renderer() {
 
 		VkPhysicalDeviceProperties props;
 		vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
-		m_maxSampledImageDescriptors = props.limits.maxPerStageDescriptorSampledImages;
+		m_maxSampledImageDescriptors = std::min(props.limits.maxPerStageDescriptorSampledImages, props.limits.maxPerStageDescriptorSamplers) - 3;
 	}
 
 	// VkDevice and VkQueues
@@ -61,11 +61,12 @@ Renderer::Renderer() {
 				.pNext = ptr(VkPhysicalDeviceVulkan12Features{
 					.pNext = ptr(VkPhysicalDeviceVulkan13Features{
 						.pNext = ptr(VkPhysicalDeviceVulkan14Features{
+							.pNext = ptr(VkPhysicalDeviceRobustness2FeaturesEXT { .nullDescriptor = true }),
 							.maintenance5 = true,
 							.pushDescriptor = true
 						}),
 						.synchronization2 = true,
-						.dynamicRendering = true,
+						.dynamicRendering = true
 					}),
 					.shaderSampledImageArrayNonUniformIndexing = true,
 					.descriptorBindingVariableDescriptorCount = true,
@@ -93,8 +94,8 @@ Renderer::Renderer() {
 					.pQueuePriorities = ptr(1.0f)
 				}
 			}),
-			.enabledExtensionCount = 1,
-			.ppEnabledExtensionNames = ptr<const char*>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME }),
+			.enabledExtensionCount = 2,
+			.ppEnabledExtensionNames = ptr<const char*>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME }),
 			.pEnabledFeatures = ptr(VkPhysicalDeviceFeatures{ 
 				.multiDrawIndirect = true,
 				.drawIndirectFirstInstance = true,
@@ -213,6 +214,10 @@ Renderer::Renderer() {
 		m_srgbPipeline = createComputePipeline(m_oneImagePipelineLayout, "shaders/srgb.comp.spv");
 		m_mipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/mip.comp.spv");
 		m_cubePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/cube.comp.spv");
+		m_cubeMipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/cubemip.comp.spv");
+		m_irradiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/irradiance.comp.spv");
+		m_radiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/radiance.comp.spv");
+		m_brdfIntegralPipeline = createComputePipeline(m_oneImagePipelineLayout, "shaders/brdfIntegral.comp.spv");
 	}
 
 	// skybox VkSampler
@@ -225,7 +230,70 @@ Renderer::Renderer() {
 			.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 			.anisotropyEnable = true,
 			.maxAnisotropy = 16,
+			.maxLod = VK_LOD_CLAMP_NONE
 		}), nullptr, &m_skyboxSampler);
+	}
+
+	// generate brdf integral tex
+	{
+		m_brdfIntegralTex = createImage(m_brdfIntegralLUTSize, m_brdfIntegralLUTSize, VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+
+		vkBeginCommandBuffer(m_computeCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+		
+		vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+				.srcAccessMask = VK_ACCESS_2_NONE,
+				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.image = m_brdfIntegralTex.image,
+				.subresourceRange = colorSubresourceRange()
+			})
+		}));
+
+		vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_brdfIntegralPipeline);
+
+		vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.pImageInfo = ptr(VkDescriptorImageInfo{
+				.imageView = m_brdfIntegralTex.view,
+				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+			})
+		}));
+
+		vkCmdDispatch(m_computeCmd, (m_brdfIntegralLUTSize + 7) / 8, (m_brdfIntegralLUTSize + 7) / 8, 1);
+
+		vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+				.dstAccessMask = VK_ACCESS_2_NONE,
+				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.image = m_brdfIntegralTex.image,
+				.subresourceRange = colorSubresourceRange()
+			})
+		}));
+
+		vkEndCommandBuffer(m_computeCmd);
+
+		vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
+			.commandBufferInfoCount = 1,
+			.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmd })
+		}), nullptr);
+
+		vkQueueWaitIdle(m_computeQueue);
+		vkResetCommandPool(m_device, m_computePool, 0);
 	}
 
 	// Model Pipeline
@@ -244,9 +312,33 @@ Renderer::Renderer() {
 			})
 		}), nullptr, &m_modelSetLayout);
 
+		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
+			.bindingCount = 3,
+			.pBindings = ptr({
+				VkDescriptorSetLayoutBinding{
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+				},
+				VkDescriptorSetLayoutBinding{
+					.binding = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+				},
+				VkDescriptorSetLayoutBinding{
+					.binding = 2,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+				}
+			})
+		}), nullptr, &m_IBLSetLayout);
+
 		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
-			.setLayoutCount = 1,
-			.pSetLayouts = &m_modelSetLayout,
+			.setLayoutCount = 2,
+			.pSetLayouts = ptr({ m_modelSetLayout, m_IBLSetLayout }),
 			.pushConstantRangeCount = 1,
 			.pPushConstantRanges = ptr(VkPushConstantRange{
 				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -264,7 +356,6 @@ Renderer::Renderer() {
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
 			.bindingCount = 1,
 			.pBindings = ptr(VkDescriptorSetLayoutBinding{
-				.binding = 0,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
@@ -352,6 +443,10 @@ Renderer::~Renderer() {
 	vkDestroyCommandPool(m_device, m_computePool, nullptr);
 	vkDestroySemaphore(m_device, m_transferToComputeSem, nullptr);
 
+	vkDestroyPipeline(m_device, m_brdfIntegralPipeline, nullptr);
+	vkDestroyPipeline(m_device, m_radiancePipeline, nullptr);
+	vkDestroyPipeline(m_device, m_irradiancePipeline, nullptr);
+	vkDestroyPipeline(m_device, m_cubeMipPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_cubePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_mipPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_srgbPipeline, nullptr);
@@ -372,11 +467,13 @@ Renderer::~Renderer() {
 	vkDestroyPipeline(m_device, m_modelPipeline, nullptr);
 	vkDestroyPipelineLayout(m_device, m_modelPipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_modelSetLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_device, m_IBLSetLayout, nullptr);
 
 	vkDestroySampler(m_device, m_skyboxSampler, nullptr);
 	destroySkybox(m_skybox);
 	destroyModel(m_model);
 
+	destroyImage(m_brdfIntegralTex);
 	destroyImage(m_colorTarget);
 	destroyImage(m_depthTarget);
 	

@@ -62,7 +62,35 @@ void Renderer::createSkybox(std::filesystem::path path) {
 		})
 	}), nullptr);
 
-	Image cube = createImage(cubeSize, cubeSize, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, true);
+	u8 cubeMips = std::log2(cubeSize) + 1;
+	Image environmentMap = createImage(cubeSize, cubeSize, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, cubeMips, true);
+	Image irradianceMap = createImage(m_irradianceMapSize, m_irradianceMapSize, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, true);
+	Image radianceMap = createImage(cubeSize, cubeSize, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, cubeMips, true);
+
+	VkImageView environmentMapView;
+	VkImageView irradianceMapView;
+	VkImageView radianceMapView;
+	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		.pNext = ptr(VkImageViewUsageCreateInfo{.usage = VK_IMAGE_USAGE_SAMPLED_BIT }),
+		.image = environmentMap.image,
+		.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+		.format = VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
+		.subresourceRange = colorSubresourceRange()
+	}), nullptr, &environmentMapView);
+	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		.pNext = ptr(VkImageViewUsageCreateInfo{.usage = VK_IMAGE_USAGE_SAMPLED_BIT }),
+		.image = irradianceMap.image,
+		.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+		.format = VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
+		.subresourceRange = colorSubresourceRange()
+	}), nullptr, &irradianceMapView);
+	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		.pNext = ptr(VkImageViewUsageCreateInfo{.usage = VK_IMAGE_USAGE_SAMPLED_BIT }),
+		.image = radianceMap.image,
+		.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+		.format = VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
+		.subresourceRange = colorSubresourceRange()
+	}), nullptr, &radianceMapView);
 
 	vkBeginCommandBuffer(m_computeCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 	vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
@@ -76,7 +104,7 @@ void Renderer::createSkybox(std::filesystem::path path) {
 			.newLayout = VK_IMAGE_LAYOUT_GENERAL,
 			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.image = cube.image,
+			.image = environmentMap.image,
 			.subresourceRange = colorSubresourceRange()
 		})
 	}));
@@ -97,12 +125,188 @@ void Renderer::createSkybox(std::filesystem::path path) {
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.pImageInfo = ptr(VkDescriptorImageInfo{
-				.imageView = cube.view,
+				.imageView = environmentMap.view,
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 			})
 		}
 	}));
 	vkCmdDispatch(m_computeCmd, (cubeSize + 7) / 8, (cubeSize + 7) / 8, 6);
+
+	std::vector<VkImageView> mipViews;
+	VkImageView mip0View;
+	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		.image = environmentMap.image,
+		.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+		.format = VK_FORMAT_R32_UINT,
+		.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, VK_REMAINING_ARRAY_LAYERS }
+	}), nullptr, &mip0View);
+	mipViews.push_back(mip0View);
+
+	vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_cubeMipPipeline);
+	for(u8 i = 1; i < cubeMips; i++) {
+		vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.image = environmentMap.image,
+				.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, static_cast<u32>(i - 1), 1, 0, VK_REMAINING_ARRAY_LAYERS }
+			})
+		}));
+
+		VkImageView curMipView;
+		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+			.image = environmentMap.image,
+			.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+			.format = VK_FORMAT_R32_UINT,
+			.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, VK_REMAINING_ARRAY_LAYERS }
+		}), nullptr, &curMipView);
+
+		vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_twoImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+			.descriptorCount = 2,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.pImageInfo = ptr({
+				VkDescriptorImageInfo{
+					.imageView = mipViews.back(),
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+				},
+				VkDescriptorImageInfo{
+					.imageView = curMipView,
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+				}
+			})
+		}));
+
+		mipViews.push_back(curMipView);
+
+		vkCmdDispatch(m_computeCmd, (std::max(cubeSize >> i, 1) + 7) / 8, (std::max(cubeSize >> i, 1) + 7) / 8, 6);
+	}
+
+	vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+		.imageMemoryBarrierCount = 2,
+		.pImageMemoryBarriers = ptr({
+			VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.image = environmentMap.image,
+				.subresourceRange = colorSubresourceRange()
+			},
+			VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+				.srcAccessMask = VK_ACCESS_2_NONE,
+				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.image = irradianceMap.image,
+				.subresourceRange = colorSubresourceRange()
+			}
+		})
+	}));
+
+	vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_irradiancePipeline);
+
+	vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneTexOneImagePipelineLayout, 0, 2, ptr({
+		VkWriteDescriptorSet{
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.pImageInfo = ptr(VkDescriptorImageInfo{
+				.sampler = m_skyboxSampler,
+				.imageView = environmentMapView,
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			})
+		},
+		VkWriteDescriptorSet{
+			.dstBinding = 1,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.pImageInfo = ptr(VkDescriptorImageInfo{
+				.imageView = irradianceMap.view,
+				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+			})
+		}
+	}));
+
+	vkCmdDispatch(m_computeCmd, (m_irradianceMapSize + 7) / 8, (m_irradianceMapSize + 7) / 8, 6);
+
+	vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+		.imageMemoryBarrierCount = 2,
+		.pImageMemoryBarriers = ptr({
+			VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+				.dstAccessMask = VK_ACCESS_2_NONE,
+				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.image = irradianceMap.image,
+				.subresourceRange = colorSubresourceRange()
+			},
+			VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+				.srcAccessMask = VK_ACCESS_2_NONE,
+				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.image = radianceMap.image,
+				.subresourceRange = colorSubresourceRange()
+			}
+		})
+	}));
+
+	vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_radiancePipeline);
+
+	vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneTexOneImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.pImageInfo = ptr(VkDescriptorImageInfo{
+			.sampler = m_skyboxSampler,
+			.imageView = environmentMapView,
+			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		})
+	}));
+
+	for(u8 i = 0; i < cubeMips; i++) {
+		VkImageView curMipView;
+		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+			.image = radianceMap.image,
+			.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+			.format = VK_FORMAT_R32_UINT,
+			.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, VK_REMAINING_ARRAY_LAYERS }
+		}), nullptr, &curMipView);
+		mipViews.push_back(curMipView);
+
+		vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneTexOneImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+			.dstBinding = 1,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.pImageInfo = ptr(VkDescriptorImageInfo{
+				.imageView = curMipView,
+				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+			})
+		}));
+
+		vkCmdDispatch(m_computeCmd, (std::max(cubeSize >> i, 1) + 7) / 8, (std::max(cubeSize >> i, 1) + 7) / 8, 6);
+	}
 
 	vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
 		.imageMemoryBarrierCount = 1,
@@ -115,10 +319,10 @@ void Renderer::createSkybox(std::filesystem::path path) {
 			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.image = cube.image,
+			.image = radianceMap.image,
 			.subresourceRange = colorSubresourceRange()
 		})
-		}));
+	}));
 
 	vkEndCommandBuffer(m_computeCmd);
 
@@ -140,19 +344,21 @@ void Renderer::createSkybox(std::filesystem::path path) {
 	vkResetCommandPool(m_device, m_computePool, 0);
 	destroyImage(srcImg);
 
-	vkDestroyImageView(m_device, cube.view, nullptr);
+	vkDestroyImageView(m_device, environmentMap.view, nullptr);
+	vkDestroyImageView(m_device, irradianceMap.view, nullptr);
+	vkDestroyImageView(m_device, radianceMap.view, nullptr);
+	for(VkImageView view : mipViews) {
+		vkDestroyImageView(m_device, view, nullptr);
+	}
 
-	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
-		.pNext = ptr(VkImageViewUsageCreateInfo{ .usage = VK_IMAGE_USAGE_SAMPLED_BIT }),
-		.image = cube.image,
-		.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
-		.format = VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
-		.subresourceRange = colorSubresourceRange()
-	}), nullptr, &cube.view);
-
-	m_skybox = Skybox{ cube };
+	environmentMap.view = environmentMapView;
+	irradianceMap.view = irradianceMapView;
+	radianceMap.view = radianceMapView;
+	m_skybox = Skybox{ environmentMap, irradianceMap, radianceMap };
 }
 
 void Renderer::destroySkybox(Skybox skybox) {
 	destroyImage(skybox.environmentMap);
+	destroyImage(skybox.irradianceMap);
+	destroyImage(skybox.radianceMap);
 }

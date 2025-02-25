@@ -7,6 +7,8 @@
 #include "../shared/vertex.h"
 #include "../shared/material.h"
 
+#include "utils.h"
+
 #define PI 3.141593f
 #define EPSILON 0.000001f
 
@@ -19,7 +21,10 @@ layout(location = 5) flat in i32 inMaterialIndex;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(binding = 0) uniform sampler2D imageHeap[];
+layout(set = 0, binding = 0) uniform sampler2D imageHeap[];
+layout(set = 1, binding = 0) uniform samplerCube irradianceMap;
+layout(set = 1, binding = 1) uniform samplerCube radianceMap;
+layout(set = 1, binding = 2) uniform sampler2D brdfIntegralTex;
 
 layout(buffer_reference, scalar) restrict readonly buffer VertexBuffer {
     Vertex vertices[];
@@ -77,6 +82,10 @@ vec3 fresnelSchlick(f32 cosTheta, vec3 f0) {
 	return f0 + (1.0f - f0) * pow(clamp(1.0f - cosTheta, 0.0f, 1.0f), 5.0f);
 }
 
+vec3 fresnelSchlickRoughness(f32 cosTheta, vec3 f0, float alpha) {
+	return f0 + (max(vec3(1.0f - alpha), f0) - f0) * pow(clamp(1.0f - cosTheta, 0.0f, 1.0f), 5.0f);
+}
+
 vec3 directionalLight(vec3 view, vec3 normal, vec3 albedo, f32 metallic, f32 alpha) {
     vec3 light = vec3(0.0f, 0.0f, -1.0f);
     vec3 halfway = normalize(view + light);
@@ -90,6 +99,16 @@ vec3 directionalLight(vec3 view, vec3 normal, vec3 albedo, f32 metallic, f32 alp
     vec3 specular = (distribution * geometry * fresnel) / (4.0f * clampedDot(normal, view) * clampedDot(normal, light) + EPSILON);
 
     return diffuse + specular;
+}
+
+
+vec3 ambientLight(vec3 view, vec3 normal, vec3 albedo, f32 metallic, f32 alpha, f32 occlusion) {
+	vec3 fresnel = fresnelSchlickRoughness(clampedDot(normal, view), mix(vec3(0.04f), albedo, metallic), alpha);
+	vec3 envMap = textureLod(radianceMap, reflect(-view, normal), alpha * (countMips(textureSize(radianceMap, 0)) - 1.0f)).rgb;
+	vec2 brdf = textureLod(brdfIntegralTex, vec2(clampedDot(normal, view), alpha), 0.0f).rg;
+	vec3 diffuse = (1.0f - fresnel) * (1.0f - metallic) * albedo * textureLod(irradianceMap, normal, 0.0f).rgb;
+	vec3 specular = envMap * (fresnel * brdf.x + brdf.y);
+	return (diffuse + specular) * occlusion;
 }
 
 void main() {
@@ -114,7 +133,7 @@ void main() {
     roughness = max(roughness, 0.04f);
 
     f32 alpha = isotrophicNDFFilter(normal, roughness * roughness);
-    vec3 outputColor = directionalLight(view, normal, albedo, metallic, alpha) + 0.01f * albedo * occlusion + emission;
+    vec3 outputColor = directionalLight(view, normal, albedo, metallic, alpha) + ambientLight(view, normal, albedo, metallic, alpha, occlusion) + emission;
 
     fragColor = vec4(pow(outputColor, vec3(1.0f / 2.2f)), 1.0f);
 }

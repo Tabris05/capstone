@@ -5,4 +5,8 @@ glslc skybox.frag -o skybox.frag.spv --target-env=vulkan1.4
 glslc srgb.comp -o srgb.comp.spv --target-env=vulkan1.4
 glslc mip.comp -o mip.comp.spv --target-env=vulkan1.4
 glslc cube.comp -o cube.comp.spv --target-env=vulkan1.4
+glslc cubemip.comp -o cubemip.comp.spv --target-env=vulkan1.4
+glslc irradiance.comp -o irradiance.comp.spv --target-env=vulkan1.4
+glslc radiance.comp -o radiance.comp.spv --target-env=vulkan1.4
+glslc brdfintegral.comp -o brdfintegral.comp.spv --target-env=vulkan1.4
 pause
