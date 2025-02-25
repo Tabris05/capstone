@@ -7,7 +7,7 @@
     #define GLM glm::
 #else
     #define GLM
-    #include "../shaders/types.h"
+    #include "../shaders/types.glsl"
 #endif
 
 #define HAS_ALBEDO 0x01

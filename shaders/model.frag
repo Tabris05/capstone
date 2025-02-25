@@ -7,7 +7,7 @@
 #include "../shared/vertex.h"
 #include "../shared/material.h"
 
-#include "utils.h"
+#include "utils.glsl"
 
 #define PI 3.141593f
 #define EPSILON 0.000001f
@@ -137,5 +137,5 @@ void main() {
     roughness = sqrt(isotrophicNDFFilter(normal, roughness * roughness));
     vec3 outputColor = directionalLight(view, normal, albedo, metallic, roughness) + ambientLight(view, normal, albedo, metallic, roughness, occlusion) + emission;
 
-    fragColor = vec4(pow(outputColor, vec3(1.0f / 2.2f)), 1.0f);
+    fragColor = agx(outputColor);
 }

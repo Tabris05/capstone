@@ -225,6 +225,7 @@ Renderer::Renderer() {
 		vkCreateSampler(m_device, ptr(VkSamplerCreateInfo{
 			.magFilter = VK_FILTER_LINEAR,
 			.minFilter = VK_FILTER_LINEAR,
+			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
 			.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 			.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 			.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,

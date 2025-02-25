@@ -1,6 +1,6 @@
 #version 460
 
-#include "types.h"
+#include "types.glsl"
 
 #define PI 3.141593f
 

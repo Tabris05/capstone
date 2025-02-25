@@ -3,7 +3,7 @@
 #define PI 3.141593f
 #define EPSILON 0.000001f
 
-#include "utils.h"
+#include "utils.glsl"
 
 layout(binding = 0) uniform samplerCube skyboxTex;
 
