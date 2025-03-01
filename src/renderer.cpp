@@ -6,8 +6,7 @@ void Renderer::run() {
 	while(!glfwWindowShouldClose(m_window)) {
 		glfwPollEvents();
 
-		//glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
-		glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
+		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
 		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
 		glm::mat4 camMatrixNoTranslation = projection * glm::mat4(glm::mat3(view));
@@ -33,14 +32,11 @@ void Renderer::run() {
 			.imageMemoryBarrierCount = 2,
 			.pImageMemoryBarriers = ptr({
 				VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
-					.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
 					.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
 					.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-					.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 					.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 					.image = m_colorTarget.image,
 					.subresourceRange = colorSubresourceRange()
 				},
@@ -49,10 +45,7 @@ void Renderer::run() {
 					.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
 					.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
 					.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-					.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 					.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 					.image = m_depthTarget.image,
 					.subresourceRange = depthSubresourceRange()
 				},
@@ -144,55 +137,50 @@ void Renderer::run() {
 				VkImageMemoryBarrier2{
 					.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
 					.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
-					.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
 					.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-					.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
 					.image = m_colorTarget.image,
 					.subresourceRange = colorSubresourceRange()
 				},
 				VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
-					.srcAccessMask = VK_ACCESS_2_NONE,
-					.dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
-					.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-					.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-					.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
 					.image = m_swapchainImages[imageIndex],
 					.subresourceRange = colorSubresourceRange()
 				}
 			})
 		}));
 
-		vkCmdBlitImage2(frameData.cmdBuffer, ptr(VkBlitImageInfo2{
-			.srcImage = m_colorTarget.image,
-			.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			.dstImage = m_swapchainImages[imageIndex],
-			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			.regionCount = 1,
-			.pRegions = ptr(VkImageBlit2{
-				.srcSubresource = colorSubresourceLayers(),
-				.srcOffsets = { { 0, 0, 0 }, { m_width, m_height, 1 } },
-				.dstSubresource = colorSubresourceLayers(),
-				.dstOffsets = { { 0, 0, 0 }, { m_width, m_height, 1 } }
-			}),
-			.filter = VK_FILTER_NEAREST
+		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipeline);
+
+		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_twoImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+			.descriptorCount = 2,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.pImageInfo = ptr({
+				VkDescriptorImageInfo{
+					.imageView = m_colorTarget.view,
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+				},
+				VkDescriptorImageInfo{
+					.imageView = m_swapchainImageViews[imageIndex],
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+				}
+			})
 		}));
+
+		vkCmdDispatch(frameData.cmdBuffer, (m_width + 7) / 8, (m_height + 7) / 8, 1);
 
 		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
-				.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-				.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = m_swapchainImages[imageIndex],
 				.subresourceRange = colorSubresourceRange()
 			})
@@ -204,7 +192,7 @@ void Renderer::run() {
 			.waitSemaphoreInfoCount = 1,
 			.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
 				.semaphore = frameData.acquireSem,
-				.stageMask = VK_PIPELINE_STAGE_2_BLIT_BIT
+				.stageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
 			}),
 			.commandBufferInfoCount = 1,
 			.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{ .commandBuffer = frameData.cmdBuffer }),

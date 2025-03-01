@@ -11,7 +11,7 @@ void Renderer::createSwapchain() {
 		.imageColorSpace = m_surfaceFormat.colorSpace,
 		.imageExtent = { static_cast<u32>(m_width), static_cast<u32>(m_height) },
 		.imageArrayLayers = 1,
-		.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+		.imageUsage = VK_IMAGE_USAGE_STORAGE_BIT,
 		.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
 		.queueFamilyIndexCount = 1,
 		.pQueueFamilyIndices = ptr(m_graphicsQueueFamily),
@@ -29,7 +29,18 @@ void Renderer::createSwapchain() {
 	m_swapchainImages.resize(numSwapchainImages);
 	vkGetSwapchainImagesKHR(m_device, m_swapchain, &numSwapchainImages, m_swapchainImages.data());
 
-	m_colorTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+	for(VkImage img : m_swapchainImages) {
+		VkImageView cur;
+		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+			.image = img,
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = m_surfaceFormat.format,
+			.subresourceRange = colorSubresourceRange()
+		}), nullptr, &cur);
+		m_swapchainImageViews.push_back(cur);
+	}
+
+	m_colorTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	m_depthTarget = createImage(m_width, m_height, m_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 }
 
@@ -43,6 +54,9 @@ void Renderer::recreateSwapchain() {
 	vkDeviceWaitIdle(m_device);
 	destroyImage(m_colorTarget);
 	destroyImage(m_depthTarget);
+	for(VkImageView view : m_swapchainImageViews) {
+		vkDestroyImageView(m_device, view, nullptr);
+	}
 
 	createSwapchain();
 	m_swapchainDirty = false;

@@ -145,7 +145,7 @@ Renderer::Renderer() {
 		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_transferToComputeSem);
 	}
 
-	// transfer pipeline layouts
+	// compute pipeline layouts
 	{
 		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
@@ -212,7 +212,7 @@ Renderer::Renderer() {
 		}), nullptr, &m_oneTexOneImagePipelineLayout);
 	}
 
-	// transfer pipelines
+	// compute pipelines
 	{
 		m_mipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/mip.comp.spv");
 		m_srgbMipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/srgbmip.comp.spv");
@@ -221,6 +221,7 @@ Renderer::Renderer() {
 		m_irradiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/irradiance.comp.spv");
 		m_radiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/radiance.comp.spv");
 		m_brdfIntegralPipeline = createComputePipeline(m_oneImagePipelineLayout, "shaders/brdfintegral.comp.spv");
+		m_postprocessingPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/postprocess.comp.spv");
 	}
 
 	// skybox VkSampler
@@ -247,14 +248,9 @@ Renderer::Renderer() {
 		vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-				.srcAccessMask = VK_ACCESS_2_NONE,
 				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = m_brdfIntegralTex.image,
 				.subresourceRange = colorSubresourceRange()
 			})
@@ -278,12 +274,8 @@ Renderer::Renderer() {
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-				.dstAccessMask = VK_ACCESS_2_NONE,
 				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = m_brdfIntegralTex.image,
 				.subresourceRange = colorSubresourceRange()
 			})
@@ -447,6 +439,7 @@ Renderer::~Renderer() {
 	vkDestroyCommandPool(m_device, m_computePool, nullptr);
 	vkDestroySemaphore(m_device, m_transferToComputeSem, nullptr);
 
+	vkDestroyPipeline(m_device, m_postprocessingPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_brdfIntegralPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_radiancePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_irradiancePipeline, nullptr);
@@ -481,6 +474,10 @@ Renderer::~Renderer() {
 	destroyImage(m_colorTarget);
 	destroyImage(m_depthTarget);
 	
+	for(VkImageView view : m_swapchainImageViews) {
+		vkDestroyImageView(m_device, view, nullptr);
+	}
+
 	vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
 	vkDestroyDevice(m_device, nullptr);
 

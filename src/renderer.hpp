@@ -30,7 +30,7 @@ class Renderer {
 		static constexpr u8 m_framesInFlight = 2;
 		static constexpr u32 m_irradianceMapSize = 32;
 		static constexpr u32 m_brdfIntegralLUTSize = 1024;
-		static constexpr VkFormat m_colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
+		static constexpr VkFormat m_colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 		static constexpr VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
 
 		static const inline std::unordered_map<fastgltf::Filter, VkFilter> m_filterMap = {
@@ -131,6 +131,7 @@ class Renderer {
 		VkSurfaceFormatKHR m_surfaceFormat;
 		VkSwapchainKHR m_swapchain = {};
 		std::vector<VkImage> m_swapchainImages;
+		std::vector<VkImageView> m_swapchainImageViews;
 
 		VkDescriptorSetLayout m_modelSetLayout = {};
 		VkDescriptorSetLayout m_IBLSetLayout = {};
@@ -165,6 +166,7 @@ class Renderer {
 		VkPipeline m_irradiancePipeline = {};
 		VkPipeline m_radiancePipeline = {};
 		VkPipeline m_brdfIntegralPipeline = {};
+		VkPipeline m_postprocessingPipeline = {};
 
 		Image m_colorTarget;
 		Image m_depthTarget;

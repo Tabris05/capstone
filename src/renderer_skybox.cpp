@@ -19,14 +19,9 @@ void Renderer::createSkybox(std::filesystem::path path) {
 	vkCmdPipelineBarrier2(m_transferCmd, ptr(VkDependencyInfo{
 		.imageMemoryBarrierCount = 1,
 		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-			.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-			.srcAccessMask = VK_ACCESS_2_NONE,
 			.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
 			.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 			.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 			.image = srcImg.image,
 			.subresourceRange = colorSubresourceRange()
 		})
@@ -40,12 +35,8 @@ void Renderer::createSkybox(std::filesystem::path path) {
 		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 			.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
 			.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-			.dstAccessMask = VK_ACCESS_2_NONE,
 			.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 			.image = srcImg.image,
 			.subresourceRange = colorSubresourceRange()
 		})
@@ -96,14 +87,9 @@ void Renderer::createSkybox(std::filesystem::path path) {
 	vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
 		.imageMemoryBarrierCount = 1,
 		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-			.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-			.srcAccessMask = VK_ACCESS_2_NONE,
 			.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 			.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-			.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 			.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 			.image = environmentMap.image,
 			.subresourceRange = colorSubresourceRange()
 		})
@@ -151,10 +137,6 @@ void Renderer::createSkybox(std::filesystem::path path) {
 				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
 				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = environmentMap.image,
 				.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, static_cast<u32>(i - 1), 1, 0, VK_REMAINING_ARRAY_LAYERS }
 			})
@@ -198,20 +180,13 @@ void Renderer::createSkybox(std::filesystem::path path) {
 				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
 				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = environmentMap.image,
 				.subresourceRange = colorSubresourceRange()
 			},
 			VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-				.srcAccessMask = VK_ACCESS_2_NONE,
 				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = irradianceMap.image,
 				.subresourceRange = colorSubresourceRange()
 			}
@@ -249,24 +224,15 @@ void Renderer::createSkybox(std::filesystem::path path) {
 			VkImageMemoryBarrier2{
 				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-				.dstAccessMask = VK_ACCESS_2_NONE,
 				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = irradianceMap.image,
 				.subresourceRange = colorSubresourceRange()
 			},
 			VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-				.srcAccessMask = VK_ACCESS_2_NONE,
 				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = radianceMap.image,
 				.subresourceRange = colorSubresourceRange()
 			}
@@ -313,12 +279,8 @@ void Renderer::createSkybox(std::filesystem::path path) {
 		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 			.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 			.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-			.dstAccessMask = VK_ACCESS_2_NONE,
 			.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 			.image = radianceMap.image,
 			.subresourceRange = colorSubresourceRange()
 		})

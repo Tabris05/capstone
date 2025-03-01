@@ -108,14 +108,9 @@ void Renderer::createModel(std::filesystem::path path) {
 		vkCmdPipelineBarrier2(m_transferCmd, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-				.srcAccessMask = VK_ACCESS_2_NONE,
 				.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
 				.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 				.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = image.image,
 				.subresourceRange = colorSubresourceRange()
 			})
@@ -137,12 +132,8 @@ void Renderer::createModel(std::filesystem::path path) {
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 				.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
 				.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-				.dstAccessMask = VK_ACCESS_2_NONE,
 				.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = image.image,
 				.subresourceRange = colorSubresourceRange()
 			})
@@ -192,10 +183,6 @@ void Renderer::createModel(std::filesystem::path path) {
 					.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
 					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-					.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 					.image = image.image,
 					.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 }
 				})
@@ -207,12 +194,8 @@ void Renderer::createModel(std::filesystem::path path) {
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-				.dstAccessMask = VK_ACCESS_2_NONE,
 				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 				.image = image.image,
 				.subresourceRange = colorSubresourceRange()
 			})

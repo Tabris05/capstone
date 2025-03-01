@@ -1,0 +1,11 @@
+#version 460
+
+#include "utils.glsl"
+
+layout(rgba16f, binding = 0) uniform restrict readonly image2D framebuffer;
+layout(binding = 1) uniform restrict writeonly image2D swapchain;
+
+layout(local_size_x = 8, local_size_y = 8) in;
+void main() {
+    imageStore(swapchain, ivec2(gl_GlobalInvocationID), agx(imageLoad(framebuffer, ivec2(gl_GlobalInvocationID)).rgb));
+}

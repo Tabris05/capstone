@@ -12,5 +12,5 @@ void main() {
     pixel += imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(1, 0)));
     pixel += imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(1, 1)));
 
-    imageStore(higherMip, ivec2(gl_GlobalInvocationID.xy), pixel / 4.0f);
+    imageStore(higherMip, ivec2(gl_GlobalInvocationID), pixel / 4.0f);
 }

@@ -137,5 +137,5 @@ void main() {
     roughness = sqrt(isotrophicNDFFilter(normal, roughness * roughness));
     vec3 outputColor = directionalLight(view, normal, albedo, metallic, roughness) + ambientLight(view, normal, albedo, metallic, roughness, occlusion) + emission;
 
-    fragColor = agx(outputColor);
+    fragColor = vec4(outputColor, 1.0f);
 }
