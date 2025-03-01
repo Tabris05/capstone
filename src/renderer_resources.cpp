@@ -49,7 +49,6 @@ void Renderer::recreateSwapchain() {
 }
 
 Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage, u32 mips, b8 cube) {
-	
 	VkSharingMode mode = VK_SHARING_MODE_EXCLUSIVE;
 	std::vector<u32> queueFamilies{ m_graphicsQueueFamily };
 
@@ -59,9 +58,16 @@ Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, Vk
 		queueFamilies.push_back(m_transferQueueFamily);
 	}
 	
+	VkImageCreateFlags flags = 0;
+	bool srgbStorageImage = format == VK_FORMAT_R8G8B8A8_SRGB && (usage & VK_IMAGE_USAGE_STORAGE_BIT);
+	if(srgbStorageImage) {
+		format = VK_FORMAT_R8G8B8A8_UNORM;
+		flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+	}
+
 	Image image;
 	vkCreateImage(m_device, ptr(VkImageCreateInfo{
-		.flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT | VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT : 0u,
+		.flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT | VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT : flags,
 		.imageType = VK_IMAGE_TYPE_2D,
 		.format = format,
 		.extent = { width, height, 1 },
@@ -83,9 +89,10 @@ Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, Vk
 	vkBindImageMemory(m_device, image.image, image.memory, 0);
 
 	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		.pNext = srgbStorageImage ? ptr(VkImageViewUsageCreateInfo{ .usage = usage & ~VK_IMAGE_USAGE_STORAGE_BIT }) : nullptr,
 		.image = image.image,
 		.viewType = cube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D,
-		.format = format,
+		.format = srgbStorageImage ? VK_FORMAT_R8G8B8A8_SRGB : format,
 		.subresourceRange = (format < 124 || format > 130) ? colorSubresourceRange() : depthSubresourceRange()
 	}), nullptr, &image.view);
 

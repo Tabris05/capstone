@@ -158,8 +158,8 @@ class Renderer {
 		VkDescriptorSetLayout m_oneTexOneImageSetLayout = {};
 		VkPipelineLayout m_oneTexOneImagePipelineLayout = {};
 		
-		VkPipeline m_srgbPipeline = {};
 		VkPipeline m_mipPipeline = {};
+		VkPipeline m_srgbMipPipeline = {};
 		VkPipeline m_cubePipeline = {};
 		VkPipeline m_cubeMipPipeline = {};
 		VkPipeline m_irradiancePipeline = {};

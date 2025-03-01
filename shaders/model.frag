@@ -93,22 +93,22 @@ vec3 directionalLight(vec3 view, vec3 normal, vec3 albedo, f32 metallic, f32 alp
 
     f32 distribution = ggxNDF(normal, halfway, alpha2);
     f32 geometry = geometrySmith(normal, view, light, alpha2);
-    vec3 fresnel = fresnelSchlick(clampedDot(halfway, view), mix(vec3(0.04f), albedo, metallic));
+    vec3 fresnel = fresnelSchlick(clampedDot(halfway, view), mix(vec3(0.04f), vec3(albedo), metallic));
 
-    vec3 diffuse = (1.0f - fresnel) * (1.0f - metallic) * albedo * clampedDot(normal, light) / PI;
+    vec3 diffuse = (1.0f - fresnel) * (1.0f - metallic) * albedo / PI;
     vec3 specular = (distribution * geometry * fresnel) / (4.0f * clampedDot(normal, view) * clampedDot(normal, light) + EPSILON);
 
-    return diffuse + specular;
+    return (diffuse + specular) * clampedDot(normal, light);
 }
 
 
 vec3 ambientLight(vec3 view, vec3 normal, vec3 albedo, f32 metallic, f32 alpha, f32 occlusion) {
 	vec3 fresnel = fresnelSchlickRoughness(clampedDot(normal, view), mix(vec3(0.04f), albedo, metallic), alpha);
-	vec3 envMap = textureLod(radianceMap, reflect(-view, normal), alpha * (countMips(textureSize(radianceMap, 0)) - 1.0f)).rgb;
+	vec3 radiance = textureLod(radianceMap, reflect(-view, normal), alpha * (countMips(textureSize(radianceMap, 0)) - 1.0f)).rgb;
 	vec2 brdf = textureLod(brdfIntegralTex, vec2(clampedDot(normal, view), alpha), 0.0f).rg;
 
 	vec3 diffuse = (1.0f - fresnel) * (1.0f - metallic) * albedo * textureLod(irradianceMap, normal, 0.0f).rgb;
-	vec3 specular = envMap * (fresnel * brdf.x + brdf.y);
+	vec3 specular = radiance * (fresnel * brdf.x + brdf.y);
 
 	return (diffuse + specular) * occlusion;
 }
@@ -124,15 +124,15 @@ void main() {
     f32 metallic = mat.metallic;
     f32 roughness = mat.roughness;
 
-    if(bitmaskGet(mat.texBitfield, HAS_ALBEDO)) albedo *= texture(imageHeap[mat.albedoIndex], inUV).rgb;
-    if(bitmaskGet(mat.texBitfield, HAS_EMISSIVE)) emission *= texture(imageHeap[mat.emissiveIndex], inUV).rgb;
-    if(bitmaskGet(mat.texBitfield, HAS_OCCLUSION)) occlusion *= texture(imageHeap[mat.occlusionIndex], inUV).r;
-    if(bitmaskGet(mat.texBitfield, HAS_NORMAL)) normal = normalize(mat3(normalize(inTangent), normalize(inBitangent), normal) * (texture(imageHeap[mat.normalIndex], inUV).rgb * 2.0f - 1.0f));
+    if(bitmaskGet(mat.texBitfield, HAS_ALBEDO)) albedo *= texture(nonuniformEXT(imageHeap[mat.albedoIndex]), inUV).rgb;
+    if(bitmaskGet(mat.texBitfield, HAS_EMISSIVE)) emission *= texture(nonuniformEXT(imageHeap[mat.emissiveIndex]), inUV).rgb;
+    if(bitmaskGet(mat.texBitfield, HAS_OCCLUSION)) occlusion *= texture(nonuniformEXT(imageHeap[mat.occlusionIndex]), inUV).r;
+    if(bitmaskGet(mat.texBitfield, HAS_NORMAL)) normal = normalize(mat3(normalize(inTangent), normalize(inBitangent), normal) * (texture(nonuniformEXT(imageHeap[mat.normalIndex]), inUV).rgb * 2.0f - 1.0f));
     if(bitmaskGet(mat.texBitfield, HAS_METALLIC_ROUGHNESS)) {
-	    metallic *= texture(imageHeap[mat.metallicRoughnessIndex], inUV).b;
-	    roughness *= texture(imageHeap[mat.metallicRoughnessIndex], inUV).g;	
+	    metallic *= texture(nonuniformEXT(imageHeap[mat.metallicRoughnessIndex]), inUV).b;
+	    roughness *= texture(nonuniformEXT(imageHeap[mat.metallicRoughnessIndex]), inUV).g;	
     }
-    
+
     roughness = max(roughness, 0.04f);
     roughness = sqrt(isotrophicNDFFilter(normal, roughness * roughness));
     vec3 outputColor = directionalLight(view, normal, albedo, metallic, roughness) + ambientLight(view, normal, albedo, metallic, roughness, occlusion) + emission;

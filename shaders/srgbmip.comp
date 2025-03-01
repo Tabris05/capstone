@@ -1,0 +1,24 @@
+#version 460
+
+layout(rgba8, binding = 0) uniform restrict readonly image2D lowerMip;
+layout(rgba8, binding = 1) uniform restrict writeonly image2D higherMip;
+
+vec4 srgbToLinear(vec4 color) {
+    return vec4(mix(color.rgb / 12.92f, pow((color.rgb + 0.055f) / 1.055f, vec3(2.4f)), greaterThan(color.rgb, vec3(0.04045f))), color.a);
+}
+
+vec4 linearToSrgb(vec4 color) {
+    return vec4(mix(color.rgb * 12.92, 1.055 * pow(color.rgb, vec3(1.0 / 2.4)) - 0.055, greaterThan(color.rgb, vec3(0.0031308))), color.a);
+}
+
+layout(local_size_x = 8, local_size_y = 8) in;
+void main() {
+    vec4 pixel = vec4(0.0f);
+
+    pixel += srgbToLinear(imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(0, 0))));
+    pixel += srgbToLinear(imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(0, 1))));
+    pixel += srgbToLinear(imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(1, 0))));
+    pixel += srgbToLinear(imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(1, 1))));
+
+    imageStore(higherMip, ivec2(gl_GlobalInvocationID.xy), linearToSrgb(pixel / 4.0f));
+}

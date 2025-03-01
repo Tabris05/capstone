@@ -61,7 +61,10 @@ Renderer::Renderer() {
 				.pNext = ptr(VkPhysicalDeviceVulkan12Features{
 					.pNext = ptr(VkPhysicalDeviceVulkan13Features{
 						.pNext = ptr(VkPhysicalDeviceVulkan14Features{
-							.pNext = ptr(VkPhysicalDeviceRobustness2FeaturesEXT { .nullDescriptor = true }),
+							.pNext = ptr(VkPhysicalDeviceRobustness2FeaturesEXT{
+								.pNext = ptr(VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT{ .fragmentShaderPixelInterlock = true }),
+								.nullDescriptor = true
+							}),
 							.maintenance5 = true,
 							.pushDescriptor = true
 						}),
@@ -94,8 +97,8 @@ Renderer::Renderer() {
 					.pQueuePriorities = ptr(1.0f)
 				}
 			}),
-			.enabledExtensionCount = 2,
-			.ppEnabledExtensionNames = ptr<const char*>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME }),
+			.enabledExtensionCount = 3,
+			.ppEnabledExtensionNames = ptr<const char*>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME, VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME }),
 			.pEnabledFeatures = ptr(VkPhysicalDeviceFeatures{ 
 				.multiDrawIndirect = true,
 				.drawIndirectFirstInstance = true,
@@ -211,13 +214,13 @@ Renderer::Renderer() {
 
 	// transfer pipelines
 	{
-		m_srgbPipeline = createComputePipeline(m_oneImagePipelineLayout, "shaders/srgb.comp.spv");
 		m_mipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/mip.comp.spv");
+		m_srgbMipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/srgbmip.comp.spv");
 		m_cubePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/cube.comp.spv");
 		m_cubeMipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/cubemip.comp.spv");
 		m_irradiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/irradiance.comp.spv");
 		m_radiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/radiance.comp.spv");
-		m_brdfIntegralPipeline = createComputePipeline(m_oneImagePipelineLayout, "shaders/brdfIntegral.comp.spv");
+		m_brdfIntegralPipeline = createComputePipeline(m_oneImagePipelineLayout, "shaders/brdfintegral.comp.spv");
 	}
 
 	// skybox VkSampler
@@ -450,7 +453,7 @@ Renderer::~Renderer() {
 	vkDestroyPipeline(m_device, m_cubeMipPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_cubePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_mipPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_srgbPipeline, nullptr);
+	vkDestroyPipeline(m_device, m_srgbMipPipeline, nullptr);
 
 	vkDestroyPipelineLayout(m_device, m_oneTexOneImagePipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_oneTexOneImageSetLayout, nullptr);

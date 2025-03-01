@@ -94,7 +94,7 @@ void Renderer::createModel(std::filesystem::path path) {
 		i32 height;
 		const fastgltf::sources::Array& data = std::get<fastgltf::sources::Array>(img.data);
 		stbi_uc* pixels = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(data.bytes.data()), data.bytes.size(), &width, &height, nullptr, STBI_rgb_alpha);
-		
+
 		u8 numMips = std::floor(std::log2(std::max(width, height))) + 1;
 
 		Buffer stagingBuffer = createBuffer(width * height * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -102,7 +102,7 @@ void Renderer::createModel(std::filesystem::path path) {
 		memcpy(stagingBuffer.hostPtr, pixels, width * height * 4);
 		stbi_image_free(pixels);
 
-		Image image = createImage(width, height, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, numMips);
+		Image image = createImage(width, height, isSrgb[idx] ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, numMips);
 		images.push_back(image);
 
 		vkCmdPipelineBarrier2(m_transferCmd, ptr(VkDependencyInfo{
@@ -157,37 +157,7 @@ void Renderer::createModel(std::filesystem::path path) {
 		}), nullptr, &mip0View);
 		mipViews.push_back(mip0View);
 
-		if(isSrgb[idx]) {
-			vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_srgbPipeline);
-			vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.imageView = mipViews.back(),
-					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-				})
-			}));
-
-			vkCmdDispatch(m_computeCmd, (width + 7) / 8, (height + 7) / 8, 1);
-
-			vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
-				.imageMemoryBarrierCount = 1,
-				.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-					.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-					.image = image.image,
-					.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
-				})
-			}));
-		}
-
-		vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_mipPipeline);
+		vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, isSrgb[idx] ? m_srgbMipPipeline: m_mipPipeline);
 		for(u8 i = 1; i < numMips; i++) {
 			VkImageView curMipView;
 			vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
@@ -368,8 +338,8 @@ void Renderer::createModel(std::filesystem::path path) {
 				const fastgltf::Attribute* tangentAccessorIndex;
 				if((tangentAccessorIndex = curPrimitive.findAttribute("TANGENT")) != curPrimitive.attributes.cend()) {
 					const fastgltf::Accessor& tangentAccessor = asset.accessors[tangentAccessorIndex->accessorIndex];
-					fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, tangentAccessor, [&vertices, oldVerticesSize, transform](glm::vec4 tangent, u64 index) {
-						vertices[index + oldVerticesSize].tangent = glm::vec4(glm::normalize(glm::vec3(transform * glm::vec4(glm::vec3(tangent), 0.0f))), tangent.w);
+					fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, tangentAccessor, [&vertices, oldVerticesSize, normalTransform](glm::vec4 tangent, u64 index) {
+						vertices[index + oldVerticesSize].tangent = glm::vec4(glm::normalize(glm::vec3(normalTransform * glm::vec4(glm::vec3(tangent), 0.0f))), tangent.w);
 					});
 				}
 				else if(uvAccessorIndex != curPrimitive.attributes.cend()) {
