@@ -55,7 +55,7 @@ void swapNodes(inout OITNode a, inout OITNode b) {
     b = tmp;
 }
 
-layout(pixel_interlock_ordered) in;
+layout(early_fragment_tests, pixel_interlock_ordered) in;
 void main() {
     vec3 view = normalize(pcs.cameraPosition - inPosition);
     Material mat = pcs.materialBuffer.materials[inMaterialIndex];
