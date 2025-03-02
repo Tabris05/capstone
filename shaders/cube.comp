@@ -1,5 +1,7 @@
 #version 460
 
+#extension GL_EXT_maximal_reconvergence : require
+
 #include "utils.glsl"
 
 #define INVPI 0.318309f

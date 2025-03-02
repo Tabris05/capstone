@@ -79,7 +79,8 @@ class Renderer {
 			Buffer indirectBuffer;
 			glm::mat4 baseTransform;
 			AABB aabb;
-			u64 numDrawCommands = 0;
+			u64 numOpaqueDrawCommands = 0;
+			u64 numBlendDrawCommands = 0;
 		};
 
 		struct Skybox {
@@ -89,12 +90,19 @@ class Renderer {
 		};
 
 		struct PushConstants {
+			VkDeviceAddress oitBuffer;
 			VkDeviceAddress vertexBuffer;
 			VkDeviceAddress materialBuffer;
 			glm::mat4 modelTransform;
 			glm::mat4 cameraTransform;
 			glm::mat3 normalTransform;
 			glm::vec3 camPos;
+			u32 frameBufferWidth;
+		};
+
+		struct PostProcessingPushConstants {
+			VkDeviceAddress oitBuffer;
+			u32 frameBufferWidth;
 		};
 
 		struct {
@@ -136,7 +144,8 @@ class Renderer {
 		VkDescriptorSetLayout m_modelSetLayout = {};
 		VkDescriptorSetLayout m_IBLSetLayout = {};
 		VkPipelineLayout m_modelPipelineLayout = {};
-		VkPipeline m_modelPipeline = {};
+		VkPipeline m_opaquePipeline = {};
+		VkPipeline m_blendPipeline = {};
 
 		VkDescriptorSetLayout m_skyboxSetLayout = {};
 		VkPipelineLayout m_skyboxPipelineLayout = {};
@@ -159,6 +168,8 @@ class Renderer {
 		VkDescriptorSetLayout m_oneTexOneImageSetLayout = {};
 		VkPipelineLayout m_oneTexOneImagePipelineLayout = {};
 		
+		VkPipelineLayout m_postprocessingPipelineLayout = {};
+
 		VkPipeline m_mipPipeline = {};
 		VkPipeline m_srgbMipPipeline = {};
 		VkPipeline m_cubePipeline = {};
@@ -168,6 +179,7 @@ class Renderer {
 		VkPipeline m_brdfIntegralPipeline = {};
 		VkPipeline m_postprocessingPipeline = {};
 
+		Buffer m_oitBuffer;
 		Image m_colorTarget;
 		Image m_depthTarget;
 		Model m_model;
@@ -198,7 +210,7 @@ class Renderer {
 		void destroySkybox(Skybox skybox);
 
 		VkPipeline createComputePipeline(VkPipelineLayout layout, std::filesystem::path shaderPath);
-		VkPipeline createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath);
+		VkPipeline createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath, VkCullModeFlagBits cullMode, bool depthWrite, bool hasColorAttachment);
 };
 
 #endif

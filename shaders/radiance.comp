@@ -1,5 +1,7 @@
 #version 460
 
+#extension GL_EXT_maximal_reconvergence : require
+
 #define PI 3.141593f
 #define EPSILON 0.000001f
 

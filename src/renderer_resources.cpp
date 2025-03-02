@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 #include <tbrs/vk_util.hpp>
+#include <../shared/oitnode.h>
 
 void Renderer::createSwapchain() {
 	VkSwapchainKHR oldSwapchain = m_swapchain;
@@ -40,8 +41,21 @@ void Renderer::createSwapchain() {
 		m_swapchainImageViews.push_back(cur);
 	}
 
+	m_oitBuffer = createBuffer(m_width * m_height * sizeof(OITNode), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	m_colorTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	m_depthTarget = createImage(m_width, m_height, m_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+
+	vkResetCommandPool(m_device, m_perFrameData->cmdPool, 0);
+	vkBeginCommandBuffer(m_perFrameData->cmdBuffer, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	vkCmdFillBuffer(m_perFrameData->cmdBuffer, m_oitBuffer.buffer, 0, VK_WHOLE_SIZE, 0);
+	vkEndCommandBuffer(m_perFrameData->cmdBuffer);
+	
+	vkQueueSubmit2(m_graphicsQueue, 1, ptr(VkSubmitInfo2{
+		.commandBufferInfoCount = 1,
+		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{ .commandBuffer = m_perFrameData->cmdBuffer })
+	}), nullptr);
+
+	vkQueueWaitIdle(m_graphicsQueue);
 }
 
 void Renderer::recreateSwapchain() {
@@ -52,6 +66,7 @@ void Renderer::recreateSwapchain() {
 	}
 
 	vkDeviceWaitIdle(m_device);
+	destroyBuffer(m_oitBuffer);
 	destroyImage(m_colorTarget);
 	destroyImage(m_depthTarget);
 	for(VkImageView view : m_swapchainImageViews) {
@@ -173,7 +188,7 @@ VkPipeline Renderer::createComputePipeline(VkPipelineLayout layout, std::filesys
 	return ret;
 }
 
-VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath) {
+VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath, VkCullModeFlagBits cullMode, bool depthWrite, bool hasColorAttachment) {
 	VkPipeline ret;
 
 	std::vector<u32> vsSrc = getShaderSource(vsPath);
@@ -181,7 +196,7 @@ VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::filesy
 
 	vkCreateGraphicsPipelines(m_device, nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
 		.pNext = ptr(VkPipelineRenderingCreateInfo{
-			.colorAttachmentCount = 1,
+			.colorAttachmentCount = hasColorAttachment ? 1u : 0u,
 			.pColorAttachmentFormats = &m_colorFormat,
 			.depthAttachmentFormat = m_depthFormat
 		}),

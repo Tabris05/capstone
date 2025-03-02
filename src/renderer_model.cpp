@@ -33,7 +33,8 @@ void Renderer::createModel(std::filesystem::path path) {
 	std::vector<Material> materials;
 	std::vector<Vertex> vertices;
 	std::vector<u32> indices;
-	std::vector<VkDrawIndexedIndirectCommand> drawCmds;
+	std::vector<VkDrawIndexedIndirectCommand> opaqueDrawCmds;
+	std::vector<VkDrawIndexedIndirectCommand> blendDrawCmds;
 	std::vector<VkDescriptorImageInfo> descriptors;
 	VkDescriptorPool pool = {};
 	VkDescriptorSet set = {};
@@ -270,7 +271,7 @@ void Renderer::createModel(std::filesystem::path path) {
 
 	vertices.reserve(numVertices);
 	indices.reserve(numIndices);
-	drawCmds.reserve(numPrimitives);
+	opaqueDrawCmds.reserve(numPrimitives);
 
 	auto processNode = [&](this auto& self, u64 index, glm::mat4 transform) -> void {
 		const fastgltf::Node& curNode = asset.nodes[index];
@@ -365,7 +366,13 @@ void Renderer::createModel(std::filesystem::path path) {
 				}
 
 				VkDrawIndexedIndirectCommand cmd = { indices.size() - oldIndicesSize, 1, oldIndicesSize, oldVerticesSize, curPrimitive.materialIndex.value() };
-				drawCmds.push_back(cmd);
+
+				if(asset.materials[curPrimitive.materialIndex.value()].alphaMode == fastgltf::AlphaMode::Blend) {
+					blendDrawCmds.push_back(cmd);
+				}
+				else {
+					opaqueDrawCmds.push_back(cmd);
+				}
 			}
 		}
 		for(u64 i : curNode.children) {
@@ -386,7 +393,9 @@ void Renderer::createModel(std::filesystem::path path) {
 
 	const u64 vertexBufferByteSize = vertices.size() * sizeof(Vertex);
 	const u64 indexBufferByteSize = indices.size() * sizeof(u32);
-	const u64 indirectBufferByteSize = drawCmds.size() * sizeof(VkDrawIndexedIndirectCommand);
+	const u64 opaqueIndirectBufferByteSize = opaqueDrawCmds.size() * sizeof(VkDrawIndexedIndirectCommand);
+	const u64 blendIndirectBufferByteSize = blendDrawCmds.size() * sizeof(VkDrawIndexedIndirectCommand);
+	const u64 indirectBufferByteSize = opaqueIndirectBufferByteSize + blendIndirectBufferByteSize;
 	Buffer stagingVertexBuffer = createBuffer(vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	Buffer stagingIndexBuffer = createBuffer(indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	Buffer stagingIndirectBuffer = createBuffer(indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -396,13 +405,13 @@ void Renderer::createModel(std::filesystem::path path) {
 
 	memcpy(stagingVertexBuffer.hostPtr, vertices.data(), vertexBufferByteSize);
 	memcpy(stagingIndexBuffer.hostPtr, indices.data(), indexBufferByteSize);
-	memcpy(stagingIndirectBuffer.hostPtr, drawCmds.data(), indirectBufferByteSize);
+	memcpy(stagingIndirectBuffer.hostPtr, opaqueDrawCmds.data(), opaqueIndirectBufferByteSize);
+	memcpy(reinterpret_cast<char*>(stagingIndirectBuffer.hostPtr) + opaqueIndirectBufferByteSize, blendDrawCmds.data(), blendIndirectBufferByteSize);
 	
 	vkCmdCopyBuffer(m_transferCmd, stagingVertexBuffer.buffer, vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = vertexBufferByteSize }));
 	vkCmdCopyBuffer(m_transferCmd, stagingIndexBuffer.buffer, indexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indexBufferByteSize }));
 	vkCmdCopyBuffer(m_transferCmd, stagingIndirectBuffer.buffer, indirectBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indirectBufferByteSize }));
 	vkEndCommandBuffer(m_transferCmd);
-
 
 	vkQueueSubmit2(m_transferQueue, 1, ptr(VkSubmitInfo2{
 		.commandBufferInfoCount = 1,
@@ -445,7 +454,7 @@ void Renderer::createModel(std::filesystem::path path) {
 
 	vkResetCommandPool(m_device, m_computePool, 0);
 
-	m_model = Model{ std::move(images), std::move(samplers), pool, set, materialBuffer, vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, drawCmds.size() };
+	m_model = Model{ std::move(images), std::move(samplers), pool, set, materialBuffer, vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, opaqueDrawCmds.size(), blendDrawCmds.size() };
 }
 
 void Renderer::destroyModel(Model model) {

@@ -1,11 +1,37 @@
 #version 460
 
+#extension GL_EXT_buffer_reference2 : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_maximal_reconvergence : require
+
+#include "../shared/oitnode.h"
+
 #include "utils.glsl"
 
 layout(rgba16f, binding = 0) uniform restrict readonly image2D framebuffer;
 layout(binding = 1) uniform restrict writeonly image2D swapchain;
 
+layout(buffer_reference, scalar) restrict buffer OITBuffer {
+    OITNode nodes[];
+};
+
+layout(push_constant, scalar) uniform constants {
+    OITBuffer oitBuffer;
+    u32 frameBufferWidth;
+} pcs;
+
 layout(local_size_x = 8, local_size_y = 8) in;
 void main() {
-    imageStore(swapchain, ivec2(gl_GlobalInvocationID), agx(imageLoad(framebuffer, ivec2(gl_GlobalInvocationID)).rgb));
+    vec3 color = imageLoad(framebuffer, ivec2(gl_GlobalInvocationID)).rgb;
+    u32 baseIndex = (gl_GlobalInvocationID.y * pcs.frameBufferWidth + gl_GlobalInvocationID.x) * 4;
+
+    //for(u32 i = 4; i > 0; i--) {
+    //    OITNode cur = pcs.oitBuffer.nodes[baseIndex + i - 1];
+    //    if(cur.depth != 0.0f) {
+    //        color = mix(unpacke5bgr9(cur.packedColor).rgb, color, cur.transmittance);
+    //    }
+    //    pcs.oitBuffer.nodes[baseIndex + i - 1] = OITNode(0, 0.0f, 0.0f);
+    //}
+
+    imageStore(swapchain, ivec2(gl_GlobalInvocationID), agx(color));
 }

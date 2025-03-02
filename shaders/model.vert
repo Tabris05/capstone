@@ -2,6 +2,7 @@
 
 #extension GL_EXT_buffer_reference2 : require
 #extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_maximal_reconvergence : require
 
 #include "../shared/vertex.h"
 #include "../shared/material.h"
@@ -22,12 +23,14 @@ layout(buffer_reference, scalar) restrict readonly buffer MaterialBuffer {
 };
 
 layout(push_constant, scalar) uniform constants {
+    u64 oitBuffer;
     VertexBuffer vertexBuffer;
     MaterialBuffer materialBuffer;
     mat4 modelTransform;
     mat4 cameraTransform;
     mat3 normalTransform;
     vec3 cameraPosition;
+    u32 frameBufferWidth;
 } pcs;
 
 void main() {

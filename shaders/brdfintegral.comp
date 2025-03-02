@@ -1,5 +1,7 @@
 #version 460
 
+#extension GL_EXT_maximal_reconvergence : require
+
 #include "types.glsl"
 
 #define PI 3.141593f

@@ -169,6 +169,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="shared\material.h" />
+    <ClInclude Include="shared\oitnode.h" />
     <ClInclude Include="shared\vertex.h" />
     <ClInclude Include="src\renderer.hpp" />
   </ItemGroup>

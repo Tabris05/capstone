@@ -1,4 +1,15 @@
+#ifndef UTILS_GLSL
+#define UTILS_GLSL
+
 #include "types.glsl"
+
+b8 bitmaskGet(u32 mask, u32 value) {
+	return b8(mask & value);
+}
+
+float clampedDot(vec3 a, vec3 b) {
+	return max(dot(a, b), 0.0f);
+}
 
 u32 calcColor(f32 color, i32 exp) {
     return u32(color / exp2(exp - 24) + 0.5f);
@@ -69,3 +80,5 @@ vec4 agx(vec3 color) {
 
     return vec4(color, 1.0f);
 }
+
+#endif

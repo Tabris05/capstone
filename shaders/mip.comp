@@ -1,5 +1,7 @@
 #version 460
 
+#extension GL_EXT_maximal_reconvergence : require
+
 layout(rgba8, binding = 0) uniform restrict readonly image2D lowerMip;
 layout(rgba8, binding = 1) uniform restrict writeonly image2D higherMip;
 

@@ -1,6 +1,7 @@
 #version 460
 
 #extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_maximal_reconvergence : require
 
 #define EPSILON 1.1920929e-7f;
 
