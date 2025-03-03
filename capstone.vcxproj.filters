@@ -69,4 +69,54 @@
       <Filter>Header Files\Shared</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\brdfintegral.comp">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\cube.comp">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\cubemip.comp">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\irradiance.comp">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\mip.comp">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\postprocess.comp">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\radiance.comp">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\srgbmip.comp">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\blend.frag">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\opaque.frag">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\skybox.frag">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\pbr.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\types.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\utils.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\model.vert">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\skybox.vert">
+      <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
 </Project>

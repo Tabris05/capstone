@@ -54,7 +54,7 @@ void Renderer::createSwapchain() {
 		.commandBufferInfoCount = 1,
 		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{ .commandBuffer = m_perFrameData->cmdBuffer })
 	}), nullptr);
-
+	
 	vkQueueWaitIdle(m_graphicsQueue);
 }
 
@@ -66,12 +66,14 @@ void Renderer::recreateSwapchain() {
 	}
 
 	vkDeviceWaitIdle(m_device);
+
 	destroyBuffer(m_oitBuffer);
 	destroyImage(m_colorTarget);
 	destroyImage(m_depthTarget);
 	for(VkImageView view : m_swapchainImageViews) {
 		vkDestroyImageView(m_device, view, nullptr);
 	}
+	m_swapchainImageViews.resize(0);
 
 	createSwapchain();
 	m_swapchainDirty = false;
@@ -222,9 +224,9 @@ VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::filesy
 		.pVertexInputState = ptr(VkPipelineVertexInputStateCreateInfo{}),
 		.pInputAssemblyState = ptr(VkPipelineInputAssemblyStateCreateInfo{.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST }),
 		.pViewportState = ptr(VkPipelineViewportStateCreateInfo{.viewportCount = 1, .scissorCount = 1 }),
-		.pRasterizationState = ptr(VkPipelineRasterizationStateCreateInfo{.cullMode = VK_CULL_MODE_BACK_BIT, .lineWidth = 1.0f }),
+		.pRasterizationState = ptr(VkPipelineRasterizationStateCreateInfo{.cullMode = static_cast<VkCullModeFlags>(cullMode), .lineWidth = 1.0f }),
 		.pMultisampleState = ptr(VkPipelineMultisampleStateCreateInfo{.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT }),
-		.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = VK_COMPARE_OP_GREATER }),
+		.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{.depthTestEnable = true, .depthWriteEnable = depthWrite, .depthCompareOp = VK_COMPARE_OP_GREATER }),
 		.pColorBlendState = ptr(VkPipelineColorBlendStateCreateInfo{.attachmentCount = 1, .pAttachments = ptr(VkPipelineColorBlendAttachmentState{.colorWriteMask = colorComponentAll() })}),
 		.pDynamicState = ptr(VkPipelineDynamicStateCreateInfo{.dynamicStateCount = 2, .pDynamicStates = ptr({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }) }),
 		.layout = layout

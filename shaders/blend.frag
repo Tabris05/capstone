@@ -49,12 +49,6 @@ layout(push_constant, scalar) uniform constants {
 
 #include "pbr.glsl"
 
-void swapNodes(inout OITNode a, inout OITNode b) {
-    OITNode tmp = a;
-    a = b;
-    b = tmp;
-}
-
 layout(early_fragment_tests, pixel_interlock_ordered) in;
 void main() {
     vec3 view = normalize(pcs.cameraPosition - inPosition);
@@ -71,9 +65,16 @@ void main() {
 
     for(u32 i = 0; i < 4; i++) {
         if(pcs.oitBuffer.nodes[baseIndex + i].depth < cur.depth) {
-            swapNodes(cur, pcs.oitBuffer.nodes[baseIndex + i]);
+            OITNode tmp = cur;
+            cur = pcs.oitBuffer.nodes[baseIndex + i];
+            pcs.oitBuffer.nodes[baseIndex + i] = tmp;
         }
     }
+    if(cur.depth != 0.0f) {
+        OITNode last = pcs.oitBuffer.nodes[baseIndex + 3];
+        pcs.oitBuffer.nodes[baseIndex + 3].packedColor = packe5bgr9(vec4(mix(unpacke5bgr9(last.packedColor).rgb, unpacke5bgr9(cur.packedColor).rgb, last.transmittance), 1.0f));
+        pcs.oitBuffer.nodes[baseIndex + 3].transmittance *= cur.transmittance;
+    }
 
-    endInvocationInterlockARB();
+   endInvocationInterlockARB();
 }

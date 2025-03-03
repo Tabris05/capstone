@@ -17,20 +17,22 @@ layout(buffer_reference, scalar) restrict buffer OITBuffer {
 
 layout(push_constant, scalar) uniform constants {
     OITBuffer oitBuffer;
-    u32 frameBufferWidth;
 } pcs;
 
 layout(local_size_x = 8, local_size_y = 8) in;
 void main() {
+    uvec2 frameBufferSize = uvec2(imageSize(framebuffer));
     vec3 color = imageLoad(framebuffer, ivec2(gl_GlobalInvocationID)).rgb;
-    u32 baseIndex = (gl_GlobalInvocationID.y * pcs.frameBufferWidth + gl_GlobalInvocationID.x) * 4;
+    u32 baseIndex = (gl_GlobalInvocationID.y * frameBufferSize.x + gl_GlobalInvocationID.x) * 4;
 
-    for(u32 i = 4; i > 0; i--) {
-        OITNode cur = pcs.oitBuffer.nodes[baseIndex + i - 1];
-        if(cur.depth != 0.0f) {
-            color = mix(unpacke5bgr9(cur.packedColor).rgb, color, cur.transmittance);
+    if(gl_GlobalInvocationID.x < frameBufferSize.x && gl_GlobalInvocationID.y < frameBufferSize.y) {
+        for(u32 i = 4; i > 0; i--) {
+            OITNode cur = pcs.oitBuffer.nodes[baseIndex + i - 1];
+            if(cur.depth != 0.0f) {
+                color = mix(unpacke5bgr9(cur.packedColor).rgb, color, cur.transmittance);
+            }
+            pcs.oitBuffer.nodes[baseIndex + i - 1] = OITNode(0, 0.0f, 0.0f);
         }
-        pcs.oitBuffer.nodes[baseIndex + i - 1] = OITNode(0, 0.0f, 0.0f);
     }
 
     imageStore(swapchain, ivec2(gl_GlobalInvocationID), agx(color));
