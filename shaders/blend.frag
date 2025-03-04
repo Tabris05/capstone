@@ -1,16 +1,13 @@
 #version 460
 
-#extension GL_EXT_buffer_reference2 : require
-#extension GL_EXT_scalar_block_layout : require
-#extension GL_EXT_nonuniform_qualifier : require
-#extension GL_EXT_maximal_reconvergence : require
 #extension GL_ARB_fragment_shader_interlock : require
+
+#include "extensions.glsl"
+#include "utils.glsl"
 
 #include "../shared/vertex.h"
 #include "../shared/material.h"
 #include "../shared/oitnode.h"
-
-#include "utils.glsl"
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
@@ -24,7 +21,7 @@ layout(set = 1, binding = 0) uniform samplerCube irradianceMap;
 layout(set = 1, binding = 1) uniform samplerCube radianceMap;
 layout(set = 1, binding = 2) uniform sampler2D brdfIntegralTex;
 
-layout(buffer_reference, scalar) restrict buffer OITBuffer {
+layout(buffer_reference, scalar) restrict coherent buffer OITBuffer {
     OITNode nodes[];
 };
 
@@ -76,5 +73,5 @@ void main() {
         pcs.oitBuffer.nodes[baseIndex + 3].transmittance *= cur.transmittance;
     }
 
-   endInvocationInterlockARB();
+    endInvocationInterlockARB();
 }

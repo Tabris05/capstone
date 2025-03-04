@@ -57,30 +57,42 @@ Renderer::Renderer() {
 		m_computeQueueFamily = getQueue(VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT);
 		m_transferQueueFamily = getQueue(VK_QUEUE_TRANSFER_BIT, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 		vkCreateDevice(m_physicalDevice, ptr(VkDeviceCreateInfo{
-			.pNext = ptr(VkPhysicalDeviceVulkan11Features{
-				.pNext = ptr(VkPhysicalDeviceVulkan12Features{
-					.pNext = ptr(VkPhysicalDeviceVulkan13Features{
-						.pNext = ptr(VkPhysicalDeviceVulkan14Features{
-							.pNext = ptr(VkPhysicalDeviceRobustness2FeaturesEXT{
-								.pNext = ptr(VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT{
-									.pNext = ptr(VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR{ .shaderMaximalReconvergence = true }),
-									.fragmentShaderPixelInterlock = true
+			.pNext = ptr(VkPhysicalDeviceFeatures2{
+				.pNext = ptr(VkPhysicalDeviceVulkan11Features{
+					.pNext = ptr(VkPhysicalDeviceVulkan12Features{
+						.pNext = ptr(VkPhysicalDeviceVulkan13Features{
+							.pNext = ptr(VkPhysicalDeviceVulkan14Features{
+								.pNext = ptr(VkPhysicalDeviceRobustness2FeaturesEXT{
+									.pNext = ptr(VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT{
+										.pNext = ptr(VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR{.shaderMaximalReconvergence = true }),
+										.fragmentShaderPixelInterlock = true
+									}),
+									.nullDescriptor = true
 								}),
-								.nullDescriptor = true
+								.maintenance5 = true,
+								.pushDescriptor = true,
 							}),
-							.maintenance5 = true,
-							.pushDescriptor = true,
+							.synchronization2 = true,
+							.dynamicRendering = true
 						}),
-						.synchronization2 = true,
-						.dynamicRendering = true
+						.shaderSampledImageArrayNonUniformIndexing = true,
+						.descriptorBindingVariableDescriptorCount = true,
+						.runtimeDescriptorArray = true,
+						.scalarBlockLayout = true,
+						.bufferDeviceAddress = true,
+						.vulkanMemoryModel = true,
+						.vulkanMemoryModelDeviceScope = true,
+						.vulkanMemoryModelAvailabilityVisibilityChains = true
 					}),
-					.shaderSampledImageArrayNonUniformIndexing = true,
-					.descriptorBindingVariableDescriptorCount = true,
-					.runtimeDescriptorArray = true,
-					.scalarBlockLayout = true,
-					.bufferDeviceAddress = true
+					.shaderDrawParameters = true
 				}),
-				.shaderDrawParameters = true
+				.features{
+					.multiDrawIndirect = true,
+					.drawIndirectFirstInstance = true,
+					.samplerAnisotropy = true,
+					.fragmentStoresAndAtomics = true,
+					.shaderInt64 = true,
+				}
 			}),
 			.queueCreateInfoCount = 3,
 			.pQueueCreateInfos = ptr({
@@ -107,12 +119,6 @@ Renderer::Renderer() {
 				VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME,
 				VK_KHR_SHADER_MAXIMAL_RECONVERGENCE_EXTENSION_NAME
 			}),
-			.pEnabledFeatures = ptr(VkPhysicalDeviceFeatures{ 
-				.multiDrawIndirect = true,
-				.drawIndirectFirstInstance = true,
-				.samplerAnisotropy = true,
-				.shaderInt64 = true
-			})
 		}), nullptr, &m_device);
 
 		volkLoadDevice(m_device);

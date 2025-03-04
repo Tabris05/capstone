@@ -230,6 +230,16 @@ void Renderer::createModel(std::filesystem::path path) {
 		descriptors.push_back(info);
 	}
 
+	if(descriptors.size() == 0) {
+		VkDescriptorImageInfo info = {
+				.sampler = m_skyboxSampler,
+				.imageView = nullptr,
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		};
+
+		descriptors.push_back(info);
+	}
+
 	vkCreateDescriptorPool(m_device, ptr(VkDescriptorPoolCreateInfo{
 		.maxSets = 1,
 		.poolSizeCount = 1,

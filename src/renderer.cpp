@@ -6,8 +6,8 @@ void Renderer::run() {
 	while(!glfwWindowShouldClose(m_window)) {
 		glfwPollEvents();
 
-		//glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
-		glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::degrees(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
+		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
+		//glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::degrees(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
 		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
 		glm::mat4 camMatrixNoTranslation = projection * glm::mat4(glm::mat3(view));
@@ -161,7 +161,7 @@ void Renderer::run() {
 					.oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
 					.newLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
 					.image = m_depthTarget.image,
-					.subresourceRange = colorSubresourceRange()
+					.subresourceRange = depthSubresourceRange()
 				})
 			}));
 		

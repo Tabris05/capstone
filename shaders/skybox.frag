@@ -1,7 +1,6 @@
 #version 460
 
-#extension GL_EXT_maximal_reconvergence : require
-
+#include "extensions.glsl"
 #include "utils.glsl"
 
 layout(location = 0) in vec3 inPosition;
