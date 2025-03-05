@@ -33,6 +33,18 @@ u32 packe5bgr9(vec4 color) {
     return (u32(exp) << 27) | (b << 18) | (g << 9) | r;
 }
 
+u32 packDepthTransmittance(f32 depth, f32 transmittance) {
+    return (uint(depth * 16777215.0f) << 8) | (uint(transmittance * 255.0f) & 0xFF);
+}
+
+f32 unpackDepth(u32 packedDepthTransmittance) {
+    return f32(packedDepthTransmittance >> 8) / 16777215.0f;
+}
+
+f32 unpackTransmittance(u32 packedDepthTransmittance) {
+    return f32(packedDepthTransmittance & 0xFF) / 255.0f;
+}
+
 vec4 unpacke5bgr9(u32 color) {
     f32 exp = f32(color >> 27);
     f32 r = f32(color & 0x1FF);

@@ -7,7 +7,6 @@ void Renderer::run() {
 		glfwPollEvents();
 
 		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
-		//glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::degrees(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
 		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
 		glm::mat4 camMatrixNoTranslation = projection * glm::mat4(glm::mat3(view));

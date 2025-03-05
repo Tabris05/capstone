@@ -9,8 +9,7 @@
 
 struct OITNode {
 	u32 packedColor;
-	f32 depth;
-	f32 transmittance;
+	u32 packedDepthTransmittance;
 };
 
 #endif

@@ -46,6 +46,12 @@ layout(push_constant, scalar) uniform constants {
 
 #include "pbr.glsl"
 
+void swapNodes(inout OITNode a, inout OITNode b) {
+    OITNode tmp = a;
+    a = b;
+    b = tmp;
+}
+
 layout(early_fragment_tests, pixel_interlock_ordered) in;
 void main() {
     vec3 view = normalize(pcs.cameraPosition - inPosition);
@@ -56,21 +62,21 @@ void main() {
 
     uvec2 screenCoords = uvec2(gl_FragCoord.xy - vec2(0.5f));
     u32 baseIndex = (screenCoords.y * pcs.frameBufferWidth + screenCoords.x) * 4;
-    OITNode cur = OITNode(packe5bgr9(vec4(outputColor, 1.0f)), gl_FragCoord.z, 1.0f - pbr.albedo.a);
+    OITNode cur = OITNode(packe5bgr9(vec4(outputColor, 1.0f)), packDepthTransmittance(gl_FragCoord.z, 1.0f - pbr.albedo.a));
 
     beginInvocationInterlockARB();
 
     for(u32 i = 0; i < 4; i++) {
-        if(pcs.oitBuffer.nodes[baseIndex + i].depth < cur.depth) {
-            OITNode tmp = cur;
-            cur = pcs.oitBuffer.nodes[baseIndex + i];
-            pcs.oitBuffer.nodes[baseIndex + i] = tmp;
+        if(unpackDepth(pcs.oitBuffer.nodes[baseIndex + i].packedDepthTransmittance) < unpackTransmittance(cur.packedDepthTransmittance)) {
+            swapNodes(pcs.oitBuffer.nodes[baseIndex + i], cur);
         }
     }
-    if(cur.depth != 0.0f) {
+    if(cur.packedDepthTransmittance != 0) {
         OITNode last = pcs.oitBuffer.nodes[baseIndex + 3];
-        pcs.oitBuffer.nodes[baseIndex + 3].packedColor = packe5bgr9(vec4(mix(unpacke5bgr9(last.packedColor).rgb, unpacke5bgr9(cur.packedColor).rgb, last.transmittance), 1.0f));
-        pcs.oitBuffer.nodes[baseIndex + 3].transmittance *= cur.transmittance;
+        f32 lastDepth = unpackDepth(last.packedDepthTransmittance);
+        f32 lastTransmittance = unpackTransmittance(last.packedDepthTransmittance);
+        pcs.oitBuffer.nodes[baseIndex + 3].packedColor = packe5bgr9(vec4(mix(unpacke5bgr9(last.packedColor).rgb, unpacke5bgr9(cur.packedColor).rgb, lastTransmittance), 1.0f));
+        pcs.oitBuffer.nodes[baseIndex + 3].packedDepthTransmittance = packDepthTransmittance(lastDepth, lastTransmittance * unpackTransmittance(cur.packedDepthTransmittance));
     }
 
     endInvocationInterlockARB();
