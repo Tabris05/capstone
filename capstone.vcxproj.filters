@@ -118,5 +118,8 @@
     <None Include="shaders\skybox.vert">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="shaders\prepass.vert">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

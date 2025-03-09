@@ -18,7 +18,7 @@ void Renderer::createSwapchain() {
 		.pQueueFamilyIndices = ptr(m_graphicsQueueFamily),
 		.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
 		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-		.presentMode = VK_PRESENT_MODE_FIFO_KHR,
+		.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR,
 		.clipped = true,
 		.oldSwapchain = oldSwapchain
 	}), nullptr, &m_swapchain);
@@ -190,11 +190,11 @@ VkPipeline Renderer::createComputePipeline(VkPipelineLayout layout, std::filesys
 	return ret;
 }
 
-VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath, VkCullModeFlagBits cullMode, bool depthWrite, bool hasColorAttachment) {
+VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment) {
 	VkPipeline ret;
 
 	std::vector<u32> vsSrc = getShaderSource(vsPath);
-	std::vector<u32> fsSrc = getShaderSource(fsPath);
+	std::vector<u32> fsSrc = fsPath.empty() ? std::vector<u32>{} : getShaderSource(fsPath);
 
 	vkCreateGraphicsPipelines(m_device, nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
 		.pNext = ptr(VkPipelineRenderingCreateInfo{
@@ -202,7 +202,7 @@ VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::filesy
 			.pColorAttachmentFormats = &m_colorFormat,
 			.depthAttachmentFormat = m_depthFormat
 		}),
-		.stageCount = 2,
+		.stageCount = fsPath.empty() ? 1u : 2u,
 		.pStages = ptr({
 			VkPipelineShaderStageCreateInfo{
 				.pNext = ptr(VkShaderModuleCreateInfo{
@@ -226,7 +226,7 @@ VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::filesy
 		.pViewportState = ptr(VkPipelineViewportStateCreateInfo{.viewportCount = 1, .scissorCount = 1 }),
 		.pRasterizationState = ptr(VkPipelineRasterizationStateCreateInfo{.cullMode = static_cast<VkCullModeFlags>(cullMode), .lineWidth = 1.0f }),
 		.pMultisampleState = ptr(VkPipelineMultisampleStateCreateInfo{.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT }),
-		.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{.depthTestEnable = true, .depthWriteEnable = depthWrite, .depthCompareOp = VK_COMPARE_OP_GREATER }),
+		.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{.depthTestEnable = true, .depthWriteEnable = depthWrite, .depthCompareOp = compareOp }),
 		.pColorBlendState = ptr(VkPipelineColorBlendStateCreateInfo{.attachmentCount = 1, .pAttachments = ptr(VkPipelineColorBlendAttachmentState{.colorWriteMask = colorComponentAll() })}),
 		.pDynamicState = ptr(VkPipelineDynamicStateCreateInfo{.dynamicStateCount = 2, .pDynamicStates = ptr({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }) }),
 		.layout = layout

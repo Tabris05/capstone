@@ -1,3 +1,5 @@
+glslc prepass.vert -o prepass.vert.spv --target-env=vulkan1.4
+glslc shadow.vert -o shadow.vert.spv --target-env=vulkan1.4
 glslc model.vert -o model.vert.spv --target-env=vulkan1.4
 glslc opaque.frag -o opaque.frag.spv --target-env=vulkan1.4
 glslc blend.frag -o blend.frag.spv --target-env=vulkan1.4

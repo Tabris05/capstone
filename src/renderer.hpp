@@ -30,6 +30,7 @@ class Renderer {
 		static constexpr u8 m_framesInFlight = 2;
 		static constexpr u32 m_irradianceMapSize = 32;
 		static constexpr u32 m_brdfIntegralLUTSize = 1024;
+		static constexpr u32 m_shadowMapSize = 2048; // this is hardcoded in shadow.vert and pbr.glsl
 		static constexpr VkFormat m_colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 		static constexpr VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
 
@@ -93,10 +94,12 @@ class Renderer {
 			VkDeviceAddress oitBuffer;
 			VkDeviceAddress vertexBuffer;
 			VkDeviceAddress materialBuffer;
-			glm::mat4 modelTransform;
 			glm::mat4 cameraTransform;
-			glm::mat3 normalTransform;
+			glm::mat4 lightTransform;
+			glm::mat4x3 modelTransform;
+			glm::vec4 lightColor;
 			glm::vec3 camPos;
+			glm::vec3 lightAngle;
 			u32 frameBufferWidth;
 		};
 
@@ -142,8 +145,10 @@ class Renderer {
 		std::vector<VkImageView> m_swapchainImageViews;
 
 		VkDescriptorSetLayout m_modelSetLayout = {};
-		VkDescriptorSetLayout m_IBLSetLayout = {};
+		VkDescriptorSetLayout m_modelPushDescriptorLayout = {};
 		VkPipelineLayout m_modelPipelineLayout = {};
+		VkPipeline m_prepassPipeline = {};
+		VkPipeline m_shadowPipeline = {};
 		VkPipeline m_opaquePipeline = {};
 		VkPipeline m_blendPipeline = {};
 
@@ -186,10 +191,14 @@ class Renderer {
 
 		Skybox m_skybox;
 		Image m_brdfIntegralTex;
-		VkSampler m_skyboxSampler;
+		Image m_shadowMap;
+		VkSampler m_skyboxSampler = {};
+		VkSampler m_shadowSampler = {};
 
 		f32 m_fov = 90.0f;
 		glm::vec3 m_position{ 0.0f, 0.0f, -2.0f };
+		//glm::vec3 m_position{ 0.0f, 0.0f, -0.25f };
+		glm::vec3 m_lightAngle{ 0.0f, 0.0f, -1.0f };
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
 		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);
@@ -210,7 +219,7 @@ class Renderer {
 		void destroySkybox(Skybox skybox);
 
 		VkPipeline createComputePipeline(VkPipelineLayout layout, std::filesystem::path shaderPath);
-		VkPipeline createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath, VkCullModeFlagBits cullMode, bool depthWrite, bool hasColorAttachment);
+		VkPipeline createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment);
 };
 
 #endif

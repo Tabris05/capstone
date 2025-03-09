@@ -2,8 +2,6 @@
 
 #include "extensions.glsl"
 
-#define EPSILON 1.1920929e-7f;
-
 vec3 vertices[36] = {
     { -1.0f,  1.0f, -1.0f },
     { -1.0f,  1.0f,  1.0f },
@@ -54,6 +52,6 @@ void main() {
     outPosition = xyz;
     
     vec4 transformedPos = pcs.camMatrix * vec4(xyz, 1.0f);
-    transformedPos.z = EPSILON;
+    transformedPos.z = 0.0f;
 	gl_Position = transformedPos;
 }

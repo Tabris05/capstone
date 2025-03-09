@@ -51,8 +51,17 @@ vec3 fresnelSchlickRoughness(f32 cosTheta, vec3 f0, float alpha) {
 	return f0 + (max(vec3(1.0f - alpha), f0) - f0) * pow(clamp(1.0f - cosTheta, 0.0f, 1.0f), 5.0f);
 }
 
-vec3 directionalLight(vec3 view, PBRMaterial mat) {
-    vec3 light = vec3(0.0f, 0.0f, -1.0f);
+f32 inShadow(vec3 lightspacePos) {
+    lightspacePos.xy = lightspacePos.xy * 0.5f + 0.5f;
+    return texture(shadowMapTex, lightspacePos);
+}
+
+vec3 directionalLight(vec3 view, vec3 light, vec3 lightspacePos, vec3 lightColor, PBRMaterial mat) {
+    f32 shadow = inShadow(lightspacePos);
+
+    if(shadow == 0.0f) {
+        return vec3(0.0f);
+    }
     vec3 halfway = normalize(view + light);
     f32 roughness2 = mat.roughness * mat.roughness;
 
@@ -63,7 +72,7 @@ vec3 directionalLight(vec3 view, PBRMaterial mat) {
     vec3 diffuse = (1.0f - fresnel) * (1.0f - mat.metallic) * mat.albedo.rgb / PI;
     vec3 specular = (distribution * geometry * fresnel) / (4.0f * clampedDot(mat.normal, view) * clampedDot(mat.normal, light) + EPSILON);
 
-    return (diffuse + specular) * clampedDot(mat.normal, light);
+    return (diffuse + specular) * clampedDot(mat.normal, light) * lightColor * shadow;
 }
 
 

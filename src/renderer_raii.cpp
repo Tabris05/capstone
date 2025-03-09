@@ -48,7 +48,7 @@ Renderer::Renderer() {
 
 		VkPhysicalDeviceProperties props;
 		vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
-		m_maxSampledImageDescriptors = std::min(props.limits.maxPerStageDescriptorSampledImages, props.limits.maxPerStageDescriptorSamplers) - 3;
+		m_maxSampledImageDescriptors = std::min(props.limits.maxPerStageDescriptorSampledImages, props.limits.maxPerStageDescriptorSamplers) - 4;
 	}
 
 	// VkDevice and VkQueues
@@ -84,7 +84,7 @@ Renderer::Renderer() {
 						.vulkanMemoryModelDeviceScope = true,
 						.vulkanMemoryModelAvailabilityVisibilityChains = true
 					}),
-					.shaderDrawParameters = true
+					.shaderDrawParameters = true,
 				}),
 				.features{
 					.multiDrawIndirect = true,
@@ -268,7 +268,7 @@ Renderer::Renderer() {
 		m_postprocessingPipeline = createComputePipeline(m_postprocessingPipelineLayout, "shaders/postprocess.comp.spv");
 	}
 
-	// skybox VkSampler
+	// global samplers
 	{
 		vkCreateSampler(m_device, ptr(VkSamplerCreateInfo{
 			.magFilter = VK_FILTER_LINEAR,
@@ -281,6 +281,15 @@ Renderer::Renderer() {
 			.maxAnisotropy = 16,
 			.maxLod = VK_LOD_CLAMP_NONE
 		}), nullptr, &m_skyboxSampler);
+
+		vkCreateSampler(m_device, ptr(VkSamplerCreateInfo{
+			.magFilter = VK_FILTER_LINEAR,
+			.minFilter = VK_FILTER_LINEAR,
+			.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.compareEnable = true,
+			.compareOp = VK_COMPARE_OP_GREATER
+		}), nullptr, &m_shadowSampler);
 	}
 
 	// generate brdf integral tex
@@ -336,7 +345,12 @@ Renderer::Renderer() {
 		vkResetCommandPool(m_device, m_computePool, 0);
 	}
 
-	// Opaque Pipeline
+	// Allocate Shadow Map
+	{
+		m_shadowMap = createImage(m_shadowMapSize, m_shadowMapSize, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+	}
+
+	// Color Pass Pipelines
 	{
 		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
 			.pNext = ptr(VkDescriptorSetLayoutBindingFlagsCreateInfo{
@@ -354,7 +368,7 @@ Renderer::Renderer() {
 
 		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
-			.bindingCount = 3,
+			.bindingCount = 4,
 			.pBindings = ptr({
 				VkDescriptorSetLayoutBinding{
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -372,13 +386,19 @@ Renderer::Renderer() {
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.descriptorCount = 1,
 					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+				},
+				VkDescriptorSetLayoutBinding{
+					.binding = 3,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
 				}
 			})
-		}), nullptr, &m_IBLSetLayout);
+		}), nullptr, &m_modelPushDescriptorLayout);
 
 		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 2,
-			.pSetLayouts = ptr({ m_modelSetLayout, m_IBLSetLayout }),
+			.pSetLayouts = ptr({ m_modelSetLayout, m_modelPushDescriptorLayout }),
 			.pushConstantRangeCount = 1,
 			.pPushConstantRanges = ptr(VkPushConstantRange{
 				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -387,8 +407,14 @@ Renderer::Renderer() {
 			})
 		}), nullptr, &m_modelPipelineLayout);
 
-		m_opaquePipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/model.vert.spv", "shaders/opaque.frag.spv", VK_CULL_MODE_BACK_BIT, true, true);
-		m_blendPipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/model.vert.spv", "shaders/blend.frag.spv", VK_CULL_MODE_NONE, false, false);
+		m_opaquePipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/model.vert.spv", "shaders/opaque.frag.spv", VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_EQUAL, false, true);
+		m_blendPipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/model.vert.spv", "shaders/blend.frag.spv", VK_CULL_MODE_NONE, VK_COMPARE_OP_GREATER, false, false);
+	}
+
+	// Depth Only Pipelines
+	{
+		m_prepassPipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/prepass.vert.spv", std::filesystem::path(), VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
+		m_shadowPipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/shadow.vert.spv", std::filesystem::path(), VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
 	}
 
 	// Skybox Pipeline
@@ -414,7 +440,7 @@ Renderer::Renderer() {
 			})
 		}), nullptr, &m_skyboxPipelineLayout);
 
-		m_skyboxPipeline = createGraphicsPipeline(m_skyboxPipelineLayout, "shaders/skybox.vert.spv", "shaders/skybox.frag.spv", VK_CULL_MODE_NONE, false, true);
+		m_skyboxPipeline = createGraphicsPipeline(m_skyboxPipelineLayout, "shaders/skybox.vert.spv", "shaders/skybox.frag.spv", VK_CULL_MODE_NONE, VK_COMPARE_OP_EQUAL, false, true);
 	}
 
 	// Load Model
@@ -490,16 +516,20 @@ Renderer::~Renderer() {
 	vkDestroyPipelineLayout(m_device, m_skyboxPipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_skyboxSetLayout, nullptr);
 
+	vkDestroyPipeline(m_device, m_shadowPipeline, nullptr);
+	vkDestroyPipeline(m_device, m_prepassPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_blendPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_opaquePipeline, nullptr);
 	vkDestroyPipelineLayout(m_device, m_modelPipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_modelSetLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_device, m_IBLSetLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_device, m_modelPushDescriptorLayout, nullptr);
 
+	vkDestroySampler(m_device, m_shadowSampler, nullptr);
 	vkDestroySampler(m_device, m_skyboxSampler, nullptr);
 	destroySkybox(m_skybox);
 	destroyModel(m_model);
 
+	destroyImage(m_shadowMap);
 	destroyImage(m_brdfIntegralTex);
 	destroyImage(m_colorTarget);
 	destroyImage(m_depthTarget);

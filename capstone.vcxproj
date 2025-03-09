@@ -184,6 +184,7 @@
     <None Include="shaders\opaque.frag" />
     <None Include="shaders\pbr.glsl" />
     <None Include="shaders\postprocess.comp" />
+    <None Include="shaders\prepass.vert" />
     <None Include="shaders\radiance.comp" />
     <None Include="shaders\skybox.frag" />
     <None Include="shaders\skybox.vert" />
