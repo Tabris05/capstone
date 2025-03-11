@@ -13,6 +13,7 @@ layout(push_constant, scalar) uniform constants {
     u64 oitBuffer;
     VertexBuffer vertexBuffer;
     u64 materialBuffer;
+    u64 poissonDiskBuffer;
     mat4 cameraTransform;
     mat4 lightTransform;
     mat4x3 modelTransform;

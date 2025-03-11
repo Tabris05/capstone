@@ -7,8 +7,7 @@ void Renderer::run() {
 		glfwPollEvents();
 
 		f32 orthoSize = std::sqrt(2.0f);
-		//glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
-		glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
+		glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(glfwGetTime()), glm::vec3(0.0f, 1.0f, 0.0f)) * m_model.baseTransform;
 		glm::mat4 view = glm::lookAt(m_position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
 		glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f), m_lightAngle, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -19,6 +18,7 @@ void Renderer::run() {
 			m_oitBuffer.devicePtr,
 			m_model.vertexBuffer.devicePtr,
 			m_model.materialBuffer.devicePtr,
+			m_poissonDiskBuffer.devicePtr,
 			projection * view,
 			lightProjection* lightView,
 			model,

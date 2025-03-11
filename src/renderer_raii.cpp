@@ -1,6 +1,8 @@
 #include "renderer.hpp"
 #include <tbrs/vk_util.hpp>
 #include <nfd/nfd_glfw3.h>
+#include <random>
+#include <numbers>
 #include "../shared/vertex.h"
 
 Renderer::Renderer() {
@@ -348,6 +350,44 @@ Renderer::Renderer() {
 	// Allocate Shadow Map
 	{
 		m_shadowMap = createImage(m_shadowMapSize, m_shadowMapSize, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+		
+		u32 poissonDiskBufferSize = m_poissonDiskWindowSize * m_poissonDiskWindowSize * m_poissonDiskFilterSize * m_poissonDiskFilterSize * sizeof(glm::vec2);
+
+		std::vector<glm::vec2> samples;
+		samples.reserve(poissonDiskBufferSize / sizeof(glm::vec2));
+
+		std::default_random_engine generator;
+		std::uniform_real_distribution<f32> distribution(-0.5f, 0.5f);
+
+		for(i32 v = m_poissonDiskFilterSize - 1; v >= 0; v--) {
+			for(i32 u = 0; u < m_poissonDiskFilterSize; u++) {
+				for(i32 i = 0; i < m_poissonDiskWindowSize * m_poissonDiskWindowSize; i++) {
+					f32 x = (u + 0.5f + distribution(generator)) / m_poissonDiskFilterSize;
+					f32 y = (v + 0.5f + distribution(generator)) / m_poissonDiskFilterSize;
+					
+					glm::vec2 sample(std::sqrtf(y) * std::cosf(2.0f * std::numbers::pi_v<f32> * x), std::sqrtf(y) * std::sinf(2.0f * std::numbers::pi_v<f32> * x));
+					samples.push_back(sample);
+				}
+			}
+		}
+
+		Buffer poissonDiskStagingBuffer = createBuffer(poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		m_poissonDiskBuffer = createBuffer(poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		memcpy(poissonDiskStagingBuffer.hostPtr, samples.data(), poissonDiskBufferSize);
+
+		vkBeginCommandBuffer(m_transferCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+		vkCmdCopyBuffer(m_transferCmd, poissonDiskStagingBuffer.buffer, m_poissonDiskBuffer.buffer, 1, ptr(VkBufferCopy{ .size = poissonDiskBufferSize }));
+		vkEndCommandBuffer(m_transferCmd);
+
+		vkQueueSubmit2(m_transferQueue, 1, ptr(VkSubmitInfo2{
+			.commandBufferInfoCount = 1,
+			.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmd })
+		}), nullptr);
+
+		vkQueueWaitIdle(m_transferQueue);
+		vkResetCommandPool(m_device, m_transferPool, 0);
+		
+		destroyBuffer(poissonDiskStagingBuffer);
 	}
 
 	// Color Pass Pipelines
@@ -534,6 +574,7 @@ Renderer::~Renderer() {
 	destroyImage(m_colorTarget);
 	destroyImage(m_depthTarget);
 	destroyBuffer(m_oitBuffer);
+	destroyBuffer(m_poissonDiskBuffer);
 	
 	for(VkImageView view : m_swapchainImageViews) {
 		vkDestroyImageView(m_device, view, nullptr);

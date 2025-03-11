@@ -31,6 +31,8 @@ class Renderer {
 		static constexpr u32 m_irradianceMapSize = 32;
 		static constexpr u32 m_brdfIntegralLUTSize = 1024;
 		static constexpr u32 m_shadowMapSize = 2048; // this is hardcoded in shadow.vert and pbr.glsl
+		static constexpr u32 m_poissonDiskWindowSize = 8; // this is hardcoded in pbr.glsl
+		static constexpr u32 m_poissonDiskFilterSize = 9; // this is hardcoded in pbr.glsl
 		static constexpr VkFormat m_colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 		static constexpr VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
 
@@ -94,6 +96,7 @@ class Renderer {
 			VkDeviceAddress oitBuffer;
 			VkDeviceAddress vertexBuffer;
 			VkDeviceAddress materialBuffer;
+			VkDeviceAddress poissonDiskBuffer;
 			glm::mat4 cameraTransform;
 			glm::mat4 lightTransform;
 			glm::mat4x3 modelTransform;
@@ -184,6 +187,7 @@ class Renderer {
 		VkPipeline m_brdfIntegralPipeline = {};
 		VkPipeline m_postprocessingPipeline = {};
 
+		Buffer m_poissonDiskBuffer;
 		Buffer m_oitBuffer;
 		Image m_colorTarget;
 		Image m_depthTarget;
@@ -197,7 +201,6 @@ class Renderer {
 
 		f32 m_fov = 90.0f;
 		glm::vec3 m_position{ 0.0f, 0.0f, -2.0f };
-		//glm::vec3 m_position{ 0.0f, 0.0f, -0.25f };
 		glm::vec3 m_lightAngle{ 0.0f, 0.0f, -1.0f };
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
