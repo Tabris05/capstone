@@ -23,7 +23,7 @@ void main() {
     vec3 color = imageLoad(framebuffer, ivec2(gl_GlobalInvocationID)).rgb;
     u32 baseIndex = (gl_GlobalInvocationID.y * frameBufferSize.x + gl_GlobalInvocationID.x) * 4;
 
-    if(gl_GlobalInvocationID.x < frameBufferSize.x && gl_GlobalInvocationID.y < frameBufferSize.y) {
+    if(gl_GlobalInvocationID.x < frameBufferSize.x && gl_GlobalInvocationID.y < frameBufferSize.y && u64(pcs.oitBuffer) != 0) {
         for(u32 i = 4; i > 0; i--) {
             OITNode cur = pcs.oitBuffer.nodes[baseIndex + i - 1];
             if(cur.packedDepthTransmittance != 0) {

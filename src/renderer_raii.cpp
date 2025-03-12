@@ -253,7 +253,7 @@ Renderer::Renderer() {
 			.pPushConstantRanges = ptr(VkPushConstantRange{
 				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 				.offset = 0,
-				.size = sizeof(PostProcessingPushConstants)
+				.size = sizeof(VkDeviceAddress)
 			})
 		}), nullptr, &m_postprocessingPipelineLayout);
 	}

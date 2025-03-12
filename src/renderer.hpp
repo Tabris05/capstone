@@ -106,11 +106,6 @@ class Renderer {
 			u32 frameBufferWidth;
 		};
 
-		struct PostProcessingPushConstants {
-			VkDeviceAddress oitBuffer;
-			u32 frameBufferWidth;
-		};
-
 		struct {
 			VkCommandPool cmdPool;
 			VkCommandBuffer cmdBuffer;
