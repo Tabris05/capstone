@@ -25,6 +25,7 @@ class Renderer {
 	
 		void run();
 		void onResize();
+		void onScroll(f32 scroll);
 
 	private:
 		static constexpr u8 m_framesInFlight = 2;
@@ -195,14 +196,16 @@ class Renderer {
 		VkSampler m_skyboxSampler = {};
 		VkSampler m_shadowSampler = {};
 
+		b8 m_flycam = false;
 		b8 m_firstClick = true;
 		f32 m_fov = 90.0f;
 		f32 m_speed = 1.44f;
 		f32 m_sensitivity = 100.0f;
-		f32 m_pitch = 0.0f;
-		glm::vec3 m_position{ 0.0f, 0.0f, -2.0f };
+		f32 m_scrollSensitivity = 0.1f;
+		f32 m_scroll = 0.0f;
+		glm::vec3 m_position{ 0.0f, 0.0f, 2.0f };
 		glm::vec3 m_rotation{ 0.0f, 0.0f,  1.0f };
-		glm::vec3 m_lightAngle{ 0.0f, 0.0f, -1.0f };
+		glm::vec3 m_lightAngle{ 0.0f, 0.0f, 1.0f };
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
 		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);

@@ -6,6 +6,10 @@ void Renderer::onResize() {
 	m_swapchainDirty = true;
 }
 
+void Renderer::onScroll(f32 scroll) {
+	m_scroll = scroll;
+}
+
 u32 Renderer::getQueue(VkQueueFlags include, VkQueueFlags exclude) {
 	u32 size = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &size, nullptr);

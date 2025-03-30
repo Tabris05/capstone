@@ -21,6 +21,9 @@ Renderer::Renderer() {
 		glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, i32 width, i32 height) {
 			reinterpret_cast<Renderer*>(glfwGetWindowUserPointer(window))->onResize();
 		});
+		glfwSetScrollCallback(m_window, [](GLFWwindow* window, f64 xOffset, f64 yOffset) {
+			reinterpret_cast<Renderer*>(glfwGetWindowUserPointer(window))->onScroll(yOffset);
+		});
 
 		NFD_Init();
 		NFD_GetNativeWindowFromGLFWWindow(m_window, &m_nativeHandle);

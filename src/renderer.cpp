@@ -19,63 +19,112 @@ void Renderer::run() {
 }
 
 void Renderer::handleInput(f32 deltaTime) {
-	if(glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS) {
-		m_position += m_speed * m_rotation * glm::vec3(deltaTime);
+
+	if(glfwGetKey(m_window, GLFW_KEY_F) == GLFW_PRESS) {
+		m_flycam = true;
 	}
-	if(glfwGetKey(m_window, GLFW_KEY_S) == GLFW_PRESS) {
-		m_position -= m_speed * m_rotation * glm::vec3(deltaTime);
-	}
-	if(glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS) {
-		m_position += m_speed * glm::normalize(glm::cross(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f))) * glm::vec3(deltaTime);
-	}
-	if(glfwGetKey(m_window, GLFW_KEY_A) == GLFW_PRESS) {
-		m_position -= m_speed * glm::normalize(glm::cross(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f))) * glm::vec3(deltaTime);
-	}
-	if(glfwGetKey(m_window, GLFW_KEY_SPACE) == GLFW_PRESS) {
-		m_position += m_speed * glm::vec3(0.0f, 1.0f, 0.0f) * glm::vec3(deltaTime);
-	}
-	if(glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
-		m_position -= m_speed * glm::vec3(0.0f, 1.0f, 0.0f) * glm::vec3(deltaTime);
-	}
-	if(glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
-		m_speed = 5.76;
-	}
-	else if(glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_RELEASE) {
-		m_speed = 1.44f;
+	if(glfwGetKey(m_window, GLFW_KEY_G) == GLFW_PRESS) {
+		m_flycam = false;
 	}
 
-	if(glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-		glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-		if(m_firstClick) {
-			m_firstClick = false;
-			glfwSetCursorPos(m_window, m_width / 2, m_height / 2);
+	if(m_flycam) {
+		if(glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS) {
+			m_position += m_speed * m_rotation * glm::vec3(deltaTime);
+		}
+		if(glfwGetKey(m_window, GLFW_KEY_S) == GLFW_PRESS) {
+			m_position -= m_speed * m_rotation * glm::vec3(deltaTime);
+		}
+		if(glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS) {
+			m_position += m_speed * glm::normalize(glm::cross(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f))) * glm::vec3(deltaTime);
+		}
+		if(glfwGetKey(m_window, GLFW_KEY_A) == GLFW_PRESS) {
+			m_position -= m_speed * glm::normalize(glm::cross(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f))) * glm::vec3(deltaTime);
+		}
+		if(glfwGetKey(m_window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+			m_position += m_speed * glm::vec3(0.0f, 1.0f, 0.0f) * glm::vec3(deltaTime);
+		}
+		if(glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
+			m_position -= m_speed * glm::vec3(0.0f, 1.0f, 0.0f) * glm::vec3(deltaTime);
+		}
+		if(glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+			m_speed = 5.76;
+		}
+		else if(glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_RELEASE) {
+			m_speed = 1.44f;
 		}
 
-		f64 mouseX, mouseY;
-		glfwGetCursorPos(m_window, &mouseX, &mouseY);
+		if(glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+			glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-		f32 rotX = m_sensitivity * static_cast<f32>(mouseX - (m_width / 2)) / m_width;
-		f32 rotY = m_sensitivity * static_cast<f32>(mouseY - (m_height / 2)) / m_height;
+			if(m_firstClick) {
+				m_firstClick = false;
+				glfwSetCursorPos(m_window, m_width / 2, m_height / 2);
+			}
 
-		f32 newPitch = glm::clamp(m_pitch - rotY, -m_maxPitch, m_maxPitch);
-		f32 deltaPitch = newPitch - m_pitch;
-		m_pitch = newPitch;
+			f64 mouseX, mouseY;
+			glfwGetCursorPos(m_window, &mouseX, &mouseY);
 
-		m_rotation = glm::rotate(m_rotation, glm::radians(-rotX), glm::vec3(0.0f, 1.0f, 0.0f));
-		m_rotation = glm::rotate(m_rotation, glm::radians(deltaPitch), glm::normalize(glm::cross(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f))));
-		glfwSetCursorPos(m_window, m_width / 2, m_height / 2);
+			f32 rotX = m_sensitivity * static_cast<f32>(mouseX - (m_width / 2)) / m_width;
+			f32 rotY = m_sensitivity * static_cast<f32>(mouseY - (m_height / 2)) / m_height;
+
+			f32 oldPitch = glm::degrees(std::asin(m_rotation.y));
+			f32 newPitch = glm::clamp(oldPitch - rotY, -m_maxPitch, m_maxPitch);
+			f32 deltaPitch = newPitch - oldPitch;
+
+			m_rotation = glm::rotate(m_rotation, glm::radians(-rotX), glm::vec3(0.0f, 1.0f, 0.0f));
+			m_rotation = glm::rotate(m_rotation, glm::radians(deltaPitch), glm::normalize(glm::cross(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f))));
+			glfwSetCursorPos(m_window, m_width / 2, m_height / 2);
+		}
+		else if(glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE) {
+			glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			m_firstClick = true;
+		}
+		m_scroll = 0.0f;
 	}
-	else if(glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE) {
-		glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-		m_firstClick = true;
+	else {
+		if(glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS || m_scroll != 0.0f) {
+			glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+			if(m_firstClick) {
+				m_firstClick = false;
+				glfwSetCursorPos(m_window, m_width / 2, m_height / 2);
+			}
+
+			f64 mouseX, mouseY;
+			glfwGetCursorPos(m_window, &mouseX, &mouseY);
+
+			f32 distance = glm::length(m_position);
+			f32 yaw = glm::degrees(std::atan2(m_position.x, m_position.z));
+			f32 pitch = glm::degrees(std::asin(m_position.y / distance));
+
+			f32 rotX = m_sensitivity * static_cast<f32>(mouseX - (m_width / 2)) / m_width;
+			f32 rotY = m_sensitivity * static_cast<f32>(mouseY - (m_height / 2)) / m_height;
+
+			yaw -= rotX;
+			pitch = glm::clamp(pitch + rotY, -m_maxPitch, m_maxPitch);
+
+			distance = std::max(distance - m_scroll * m_scrollSensitivity, std::numeric_limits<f32>::epsilon());
+			m_scroll = 0.0;
+
+			m_position.x = distance * std::cos(glm::radians(pitch)) * std::sin(glm::radians(yaw));
+			m_position.y = distance * std::sin(glm::radians(pitch));
+			m_position.z = distance * std::cos(glm::radians(pitch)) * std::cos(glm::radians(yaw));
+
+			m_rotation = glm::normalize(-m_position);
+
+			glfwSetCursorPos(m_window, m_width / 2, m_height / 2);
+		}
+		else if(glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE) {
+			glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			m_firstClick = true;
+		}
 	}
 }
 
 void Renderer::render() {
 	f32 orthoSize = std::sqrt(2.0f);
 	glm::mat4 model = m_model.baseTransform;
-	glm::mat4 view = glm::lookAt(m_position, m_position + m_rotation, glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 view = glm::lookAt(m_position, m_flycam ? m_position + m_rotation : glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
 	glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f), m_lightAngle, glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 lightProjection = ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, -orthoSize, orthoSize);
