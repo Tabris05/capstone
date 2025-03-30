@@ -33,6 +33,7 @@ class Renderer {
 		static constexpr u32 m_shadowMapSize = 2048; // this is hardcoded in shadow.vert and pbr.glsl
 		static constexpr u32 m_poissonDiskWindowSize = 8; // this is hardcoded in pbr.glsl
 		static constexpr u32 m_poissonDiskFilterSize = 9; // this is hardcoded in pbr.glsl
+		static constexpr f32 m_maxPitch = 89.0f; // in deg
 		static constexpr VkFormat m_colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 		static constexpr VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
 
@@ -194,8 +195,13 @@ class Renderer {
 		VkSampler m_skyboxSampler = {};
 		VkSampler m_shadowSampler = {};
 
+		b8 m_firstClick = true;
 		f32 m_fov = 90.0f;
+		f32 m_speed = 1.44f;
+		f32 m_sensitivity = 100.0f;
+		f32 m_pitch = 0.0f;
 		glm::vec3 m_position{ 0.0f, 0.0f, -2.0f };
+		glm::vec3 m_rotation{ 0.0f, 0.0f,  1.0f };
 		glm::vec3 m_lightAngle{ 0.0f, 0.0f, -1.0f };
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
@@ -218,6 +224,9 @@ class Renderer {
 
 		VkPipeline createComputePipeline(VkPipelineLayout layout, std::filesystem::path shaderPath);
 		VkPipeline createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment);
+
+		void handleInput(f32 deltaTime);
+		void render();
 };
 
 #endif
