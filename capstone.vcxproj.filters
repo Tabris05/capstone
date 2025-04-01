@@ -54,6 +54,24 @@
     <ClCompile Include="src\renderer_skybox.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="include\imgui\imgui.cpp">
+      <Filter>Source Files\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_draw.cpp">
+      <Filter>Source Files\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_tables.cpp">
+      <Filter>Source Files\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_widgets.cpp">
+      <Filter>Source Files\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_impl_glfw.cpp">
+      <Filter>Source Files\Dependencies</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_impl_vulkan.cpp">
+      <Filter>Source Files\Dependencies</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\renderer.hpp">

@@ -1,6 +1,9 @@
 #include "renderer.hpp"
 #include <tbrs/vk_util.hpp>
 #include <nfd/nfd_glfw3.h>
+#include <imgui/imgui.h>
+#include <imgui/imgui_impl_glfw.h>
+#include <imgui/imgui_impl_vulkan.h>
 #include <random>
 #include <numbers>
 #include "../shared/vertex.h"
@@ -486,6 +489,28 @@ Renderer::Renderer() {
 		m_skyboxPipeline = createGraphicsPipeline(m_skyboxPipelineLayout, "shaders/skybox.vert.spv", "shaders/skybox.frag.spv", VK_CULL_MODE_NONE, VK_COMPARE_OP_EQUAL, false, true);
 	}
 
+	// ImGui
+	{
+		ImGui::CreateContext();
+		ImGui_ImplGlfw_InitForVulkan(m_window, true);
+		ImGui_ImplVulkan_Init(ptr(ImGui_ImplVulkan_InitInfo{
+			.ApiVersion = VK_API_VERSION_1_4,
+			.Instance = m_instance,
+			.PhysicalDevice = m_physicalDevice,
+			.Device = m_device,
+			.QueueFamily = m_graphicsQueueFamily,
+			.Queue = m_graphicsQueue,
+			.MinImageCount = 3,
+			.ImageCount = 3,
+			.DescriptorPoolSize = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE,
+			.UseDynamicRendering = true,
+			.PipelineRenderingCreateInfo{
+				.colorAttachmentCount = 1,
+				.pColorAttachmentFormats = &m_colorFormat
+			}
+		}));
+	}
+
 	// Load Model
 	{
 		nfdu8char_t* outPath;
@@ -523,6 +548,10 @@ Renderer::Renderer() {
 
 Renderer::~Renderer() {
 	vkDeviceWaitIdle(m_device);
+
+	ImGui_ImplVulkan_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 
 	for(u8 i = 0; i < m_framesInFlight; i++) {
 		vkDestroyCommandPool(m_device, m_perFrameData[i].cmdPool, nullptr);
