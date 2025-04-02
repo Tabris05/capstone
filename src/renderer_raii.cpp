@@ -252,9 +252,34 @@ Renderer::Renderer() {
 			.pSetLayouts = &m_oneTexOneImageSetLayout
 		}), nullptr, &m_oneTexOneImagePipelineLayout);
 
+		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
+			.bindingCount = 3,
+			.pBindings = ptr({
+				VkDescriptorSetLayoutBinding{
+					.binding = 0,
+					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+				},
+				VkDescriptorSetLayoutBinding{
+					.binding = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+				},
+				VkDescriptorSetLayoutBinding{
+					.binding = 2,
+					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+					.descriptorCount = 1,
+					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+				}
+			})
+			}), nullptr, &m_threeImageSetLayout);
+
 		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
-			.pSetLayouts = &m_twoImageSetLayout,
+			.pSetLayouts = &m_threeImageSetLayout,
 			.pushConstantRangeCount = 1,
 			.pPushConstantRanges = ptr(VkPushConstantRange{
 				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -506,7 +531,7 @@ Renderer::Renderer() {
 			.UseDynamicRendering = true,
 			.PipelineRenderingCreateInfo{
 				.colorAttachmentCount = 1,
-				.pColorAttachmentFormats = &m_colorFormat
+				.pColorAttachmentFormats = &m_uiFormat
 			}
 		}));
 	}
@@ -574,7 +599,8 @@ Renderer::~Renderer() {
 	vkDestroyPipeline(m_device, m_srgbMipPipeline, nullptr);
 
 	vkDestroyPipelineLayout(m_device, m_postprocessingPipelineLayout, nullptr);
-	
+	vkDestroyDescriptorSetLayout(m_device, m_threeImageSetLayout, nullptr);
+
 	vkDestroyPipelineLayout(m_device, m_oneTexOneImagePipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_oneTexOneImageSetLayout, nullptr);
 
@@ -605,6 +631,7 @@ Renderer::~Renderer() {
 	destroyImage(m_brdfIntegralTex);
 	destroyImage(m_colorTarget);
 	destroyImage(m_depthTarget);
+	destroyImage(m_uiTarget);
 	destroyBuffer(m_oitBuffer);
 	destroyBuffer(m_poissonDiskBuffer);
 	

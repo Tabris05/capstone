@@ -58,7 +58,7 @@ f32 countMips(ivec2 dimensions) {
     return floor(log2(max(dimensions.x, dimensions.y))) + 1.0f;
 }
 
-vec4 agx(vec3 color) {  
+vec3 agx(vec3 color) {  
     const mat3 matrix = {
     	{ 0.842479062253094, 0.0423282422610123, 0.0423756549057051 },
     	{ 0.0784335999999992, 0.878468636469772, 0.0784336 },
@@ -90,7 +90,7 @@ vec4 agx(vec3 color) {
     color = inverse * color;
     color = clamp(color, vec3(0.0f), vec3(1.0f));
 
-    return vec4(color, 1.0f);
+    return color;
 }
 
 #endif

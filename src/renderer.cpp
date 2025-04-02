@@ -4,6 +4,7 @@
 #include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtx/vector_angle.hpp>
 #include <imgui/imgui.h>
+#include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_vulkan.h>
 
 void Renderer::run() {
@@ -12,7 +13,9 @@ void Renderer::run() {
 	while(!glfwWindowShouldClose(m_window)) {
 		glfwPollEvents();
 
-		handleInput(thisFrame - lastFrame);
+		if(const ImGuiIO& io = ImGui::GetIO(); !io.WantCaptureMouse && !io.WantCaptureKeyboard) {
+			handleInput(thisFrame - lastFrame);
+		}
 		render();
 
 		lastFrame = thisFrame;
@@ -124,6 +127,21 @@ void Renderer::handleInput(f32 deltaTime) {
 }
 
 void Renderer::render() {
+
+
+	ImGui_ImplVulkan_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	// camera Menu
+	ImGui::Begin("Camera");
+	ImGui::Text("Camera Control Scheme");
+	if(ImGui::Combo("##combo0", &m_camIdx, ptr({ "Orbital", "Flycam" }), 2)) {
+		m_flycam = m_camIdx == 1;
+	}
+	ImGui::End();
+	ImGui::Render();
+
 	f32 orthoSize = std::sqrt(2.0f);
 	glm::mat4 model = m_model.baseTransform;
 	glm::mat4 view = glm::lookAt(m_position, m_flycam ? m_position + m_rotation : glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -164,352 +182,416 @@ void Renderer::render() {
 	vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_shadowMapSize), static_cast<f32>(m_shadowMapSize), 0.0f, 1.0f }));
 	vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_shadowMapSize), static_cast<u32>(m_shadowMapSize) } }));
 
-	vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-			.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-			.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
-			.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-			.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-			.image = m_shadowMap.image,
-			.subresourceRange = depthSubresourceRange()
-		})
-	}));
-
-	vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
-		.renderArea = { 0, 0, { static_cast<u32>(m_shadowMapSize), static_cast<u32>(m_shadowMapSize) } },
-		.layerCount = 1,
-		.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-			.imageView = m_shadowMap.view,
-			.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-			.clearValue = { 0.0f }
-		})
-	}));
-
-	if(m_model.numOpaqueDrawCommands > 0) {
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
-		vkCmdBindIndexBuffer(frameData.cmdBuffer, m_model.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
-		vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
-	}
-
-	vkCmdEndRendering(frameData.cmdBuffer);
-
-	vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 2,
-		.pImageMemoryBarriers = ptr({
-			VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-				.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.image = m_shadowMap.image,
-				.subresourceRange = depthSubresourceRange(),
-			},
-			VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-				.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+	// shadow pass
+	{
+		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+				.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
 				.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
 				.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
 				.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-				.image = m_depthTarget.image,
+				.image = m_shadowMap.image,
 				.subresourceRange = depthSubresourceRange()
-			}
-		})
-	}));
-
-	vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
-	vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
-
-	vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
-		.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
-		.layerCount = 1,
-		.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-			.imageView = m_depthTarget.view,
-			.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-			.clearValue = { 0.0f }
-		})
-	}));
-
-	if(m_model.numOpaqueDrawCommands > 0) {
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_prepassPipeline);
-		vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
-	}
-
-	vkCmdEndRendering(frameData.cmdBuffer);
-
-	vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 2,
-		.pImageMemoryBarriers = ptr({
-			VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-				.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-				.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-				.image = m_colorTarget.image,
-				.subresourceRange = colorSubresourceRange()
-			},
-			VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-				.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
-				.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-				.newLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
-				.image = m_depthTarget.image,
-				.subresourceRange = depthSubresourceRange()
-			}
-		})
-	}));
-
-	vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
-		.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
-		.layerCount = 1,
-		.colorAttachmentCount = 1,
-		.pColorAttachments = ptr(VkRenderingAttachmentInfo{
-			.imageView = m_colorTarget.view,
-			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-			.clearValue = { 0.0f, 0.0f, 0.0f, 1.0f }
-		}),
-		.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-			.imageView = m_depthTarget.view,
-			.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		})
-	}));
-
-	if(m_model.numOpaqueDrawCommands > 0) {
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_opaquePipeline);
-		vkCmdBindDescriptorSets(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 0, 1, &m_model.texSet, 0, nullptr);
-		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 1, 4, ptr({
-			VkWriteDescriptorSet{
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.sampler = m_skyboxSampler,
-					.imageView = m_skybox.irradianceMap.view,
-					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				})
-			},
-			VkWriteDescriptorSet{
-				.dstBinding = 1,
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.sampler = m_skyboxSampler,
-					.imageView = m_skybox.radianceMap.view,
-					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				})
-			},
-			VkWriteDescriptorSet{
-				.dstBinding = 2,
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.sampler = m_skyboxSampler,
-					.imageView = m_brdfIntegralTex.view,
-					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				})
-			},
-			VkWriteDescriptorSet{
-				.dstBinding = 3,
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.sampler = m_shadowSampler,
-					.imageView = m_shadowMap.view,
-					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				})
-			}
-		}));
-		vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
-	}
-
-	if(m_skybox.environmentMap.image != VkImage{}) {
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipeline);
-		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = ptr(VkDescriptorImageInfo{
-				.sampler = m_skyboxSampler,
-				.imageView = m_skybox.environmentMap.view,
-				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 			})
-		}));
-		vkCmdPushConstants(frameData.cmdBuffer, m_skyboxPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &camMatrixNoTranslation);
-		vkCmdDraw(frameData.cmdBuffer, 36, 1, 0, 0);
+			}));
+
+		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
+			.renderArea = { 0, 0, { static_cast<u32>(m_shadowMapSize), static_cast<u32>(m_shadowMapSize) } },
+			.layerCount = 1,
+			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
+				.imageView = m_shadowMap.view,
+				.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				.clearValue = { 0.0f }
+			})
+			}));
+
+		if(m_model.numOpaqueDrawCommands > 0) {
+			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
+			vkCmdBindIndexBuffer(frameData.cmdBuffer, m_model.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
+			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
+		}
+
+		vkCmdEndRendering(frameData.cmdBuffer);
 	}
 
-	vkCmdEndRendering(frameData.cmdBuffer);
-
-	if(m_model.numBlendDrawCommands > 0) {
+	// depth pre-pass
+	{
 		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-			.bufferMemoryBarrierCount = 1,
-			.pBufferMemoryBarriers = ptr(VkBufferMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-				.buffer = m_oitBuffer.buffer,
-				.size = VK_WHOLE_SIZE
+			.imageMemoryBarrierCount = 2,
+			.pImageMemoryBarriers = ptr({
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+					.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+					.oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+					.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					.image = m_shadowMap.image,
+					.subresourceRange = depthSubresourceRange(),
+				},
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+					.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+					.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+					.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+					.image = m_depthTarget.image,
+					.subresourceRange = depthSubresourceRange()
+				}
 			})
-		}));
+			}));
+
+		vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
+		vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
 
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
 			.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
 			.layerCount = 1,
 			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
 				.imageView = m_depthTarget.view,
-				.imageLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
-				.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-				.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				.clearValue = { 0.0f }
 			})
-		}));
+			}));
 
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_blendPipeline);
-
-		vkCmdBindDescriptorSets(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 0, 1, &m_model.texSet, 0, nullptr);
-		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 1, 4, ptr({
-			VkWriteDescriptorSet{
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.sampler = m_skyboxSampler,
-					.imageView = m_skybox.irradianceMap.view,
-					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				})
-			},
-			VkWriteDescriptorSet{
-				.dstBinding = 1,
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.sampler = m_skyboxSampler,
-					.imageView = m_skybox.radianceMap.view,
-					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				})
-			},
-			VkWriteDescriptorSet{
-				.dstBinding = 2,
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.sampler = m_skyboxSampler,
-					.imageView = m_brdfIntegralTex.view,
-					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				})
-			},
-			VkWriteDescriptorSet{
-				.dstBinding = 3,
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.sampler = m_shadowSampler,
-					.imageView = m_shadowMap.view,
-					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				})
-			}
-		}));
-		vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
-
-		vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, m_model.numOpaqueDrawCommands * sizeof(VkDrawIndexedIndirectCommand), m_model.numBlendDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
+		if(m_model.numOpaqueDrawCommands > 0) {
+			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_prepassPipeline);
+			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
+		}
 
 		vkCmdEndRendering(frameData.cmdBuffer);
-
-		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-			.bufferMemoryBarrierCount = 1,
-			.pBufferMemoryBarriers = ptr(VkBufferMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-				.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-				.buffer = m_oitBuffer.buffer,
-				.size = VK_WHOLE_SIZE
-			}),
-		}));
-	}
-	else {
-		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-			.bufferMemoryBarrierCount = 1,
-			.pBufferMemoryBarriers = ptr(VkBufferMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-				.buffer = m_oitBuffer.buffer,
-				.size = VK_WHOLE_SIZE
-			}),
-		}));
 	}
 
-	vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 2,
-		.pImageMemoryBarriers = ptr({
-			VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-				.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.image = m_colorTarget.image,
-				.subresourceRange = colorSubresourceRange()
-			},
-			VkImageMemoryBarrier2{
+	// opaque color pass
+	{
+		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 2,
+			.pImageMemoryBarriers = ptr({
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+					.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+					.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+					.image = m_colorTarget.image,
+					.subresourceRange = colorSubresourceRange()
+				},
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+					.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+					.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+					.oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+					.newLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
+					.image = m_depthTarget.image,
+					.subresourceRange = depthSubresourceRange()
+				}
+			})
+			}));
+
+		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
+			.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
+			.layerCount = 1,
+			.colorAttachmentCount = 1,
+			.pColorAttachments = ptr(VkRenderingAttachmentInfo{
+				.imageView = m_colorTarget.view,
+				.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				.clearValue = { 0.0f, 0.0f, 0.0f, 1.0f }
+			}),
+			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
+				.imageView = m_depthTarget.view,
+				.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+			})
+			}));
+
+		if(m_model.numOpaqueDrawCommands > 0) {
+			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_opaquePipeline);
+			vkCmdBindDescriptorSets(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 0, 1, &m_model.texSet, 0, nullptr);
+			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 1, 4, ptr({
+				VkWriteDescriptorSet{
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pImageInfo = ptr(VkDescriptorImageInfo{
+						.sampler = m_skyboxSampler,
+						.imageView = m_skybox.irradianceMap.view,
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					})
+				},
+				VkWriteDescriptorSet{
+					.dstBinding = 1,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pImageInfo = ptr(VkDescriptorImageInfo{
+						.sampler = m_skyboxSampler,
+						.imageView = m_skybox.radianceMap.view,
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					})
+				},
+				VkWriteDescriptorSet{
+					.dstBinding = 2,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pImageInfo = ptr(VkDescriptorImageInfo{
+						.sampler = m_skyboxSampler,
+						.imageView = m_brdfIntegralTex.view,
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					})
+				},
+				VkWriteDescriptorSet{
+					.dstBinding = 3,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pImageInfo = ptr(VkDescriptorImageInfo{
+						.sampler = m_shadowSampler,
+						.imageView = m_shadowMap.view,
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					})
+				}
+				}));
+			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
+		}
+
+		if(m_skybox.environmentMap.image != VkImage{}) {
+			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipeline);
+			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.pImageInfo = ptr(VkDescriptorImageInfo{
+					.sampler = m_skyboxSampler,
+					.imageView = m_skybox.environmentMap.view,
+					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				})
+				}));
+			vkCmdPushConstants(frameData.cmdBuffer, m_skyboxPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &camMatrixNoTranslation);
+			vkCmdDraw(frameData.cmdBuffer, 36, 1, 0, 0);
+		}
+
+		vkCmdEndRendering(frameData.cmdBuffer);
+	}
+
+	// transparent color pass
+	{
+		if(m_model.numBlendDrawCommands > 0) {
+			vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+				.bufferMemoryBarrierCount = 1,
+				.pBufferMemoryBarriers = ptr(VkBufferMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+					.buffer = m_oitBuffer.buffer,
+					.size = VK_WHOLE_SIZE
+				})
+				}));
+
+			vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
+				.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
+				.layerCount = 1,
+				.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
+					.imageView = m_depthTarget.view,
+					.imageLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
+					.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+					.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				})
+				}));
+
+			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_blendPipeline);
+
+			vkCmdBindDescriptorSets(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 0, 1, &m_model.texSet, 0, nullptr);
+			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 1, 4, ptr({
+				VkWriteDescriptorSet{
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pImageInfo = ptr(VkDescriptorImageInfo{
+						.sampler = m_skyboxSampler,
+						.imageView = m_skybox.irradianceMap.view,
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					})
+				},
+				VkWriteDescriptorSet{
+					.dstBinding = 1,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pImageInfo = ptr(VkDescriptorImageInfo{
+						.sampler = m_skyboxSampler,
+						.imageView = m_skybox.radianceMap.view,
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					})
+				},
+				VkWriteDescriptorSet{
+					.dstBinding = 2,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pImageInfo = ptr(VkDescriptorImageInfo{
+						.sampler = m_skyboxSampler,
+						.imageView = m_brdfIntegralTex.view,
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					})
+				},
+				VkWriteDescriptorSet{
+					.dstBinding = 3,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pImageInfo = ptr(VkDescriptorImageInfo{
+						.sampler = m_shadowSampler,
+						.imageView = m_shadowMap.view,
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					})
+				}
+				}));
+			vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
+
+			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, m_model.numOpaqueDrawCommands * sizeof(VkDrawIndexedIndirectCommand), m_model.numBlendDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
+
+			vkCmdEndRendering(frameData.cmdBuffer);
+
+			vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+				.bufferMemoryBarrierCount = 1,
+				.pBufferMemoryBarriers = ptr(VkBufferMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+					.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+					.buffer = m_oitBuffer.buffer,
+					.size = VK_WHOLE_SIZE
+				}),
+				}));
+		}
+		else {
+			vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+				.bufferMemoryBarrierCount = 1,
+				.pBufferMemoryBarriers = ptr(VkBufferMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+					.buffer = m_oitBuffer.buffer,
+					.size = VK_WHOLE_SIZE
+				}),
+				}));
+		}
+	}
+
+	// ui pass
+	{
+		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 3,
+			.pImageMemoryBarriers = ptr({
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+					.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+					.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.image = m_colorTarget.image,
+					.subresourceRange = colorSubresourceRange()
+				},
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+					.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+					.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+					.image = m_uiTarget.image,
+					.subresourceRange = colorSubresourceRange()
+				},
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.image = m_swapchainImages[imageIndex],
+					.subresourceRange = colorSubresourceRange()
+				}
+			})
+			}));
+
+		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
+			.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
+			.layerCount = 1,
+			.colorAttachmentCount = 1,
+			.pColorAttachments = ptr(VkRenderingAttachmentInfo{
+				.imageView = m_uiTarget.view,
+				.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				.clearValue = { 0.0f, 0.0f, 0.0f, 0.0f }
+			})
+			}));
+
+		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), frameData.cmdBuffer);
+
+		vkCmdEndRendering(frameData.cmdBuffer);
+	}
+
+	// post-processing pass
+	{
+		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr({
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+					.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+					.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.image = m_uiTarget.image,
+					.subresourceRange = colorSubresourceRange()
+				},
+			})
+			}));
+
+		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipeline);
+
+		VkDeviceAddress postprocessingPCs = m_model.numBlendDrawCommands != 0 ? m_oitBuffer.devicePtr : VkDeviceAddress{};
+		vkCmdPushConstants(frameData.cmdBuffer, m_postprocessingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VkDeviceAddress), &postprocessingPCs);
+
+		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+			.descriptorCount = 3,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.pImageInfo = ptr({
+				VkDescriptorImageInfo{
+					.imageView = m_colorTarget.view,
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+				},
+				VkDescriptorImageInfo{
+					.imageView = m_uiTarget.view,
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+				},
+				VkDescriptorImageInfo{
+					.imageView = m_swapchainImageViews[imageIndex],
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+				}
+			})
+			}));
+
+		vkCmdDispatch(frameData.cmdBuffer, (m_width + 7) / 8, (m_height + 7) / 8, 1);
+
+		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 				.image = m_swapchainImages[imageIndex],
 				.subresourceRange = colorSubresourceRange()
-			}
-		})
-	}));
-
-	vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipeline);
-
-	VkDeviceAddress postprocessingPCs = m_model.numBlendDrawCommands != 0 ? m_oitBuffer.devicePtr : VkDeviceAddress{};
-	vkCmdPushConstants(frameData.cmdBuffer, m_postprocessingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VkDeviceAddress), &postprocessingPCs);
-
-	vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
-		.descriptorCount = 2,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		.pImageInfo = ptr({
-			VkDescriptorImageInfo{
-				.imageView = m_colorTarget.view,
-				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-			},
-			VkDescriptorImageInfo{
-				.imageView = m_swapchainImageViews[imageIndex],
-				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-			}
-		})
-	}));
-
-	vkCmdDispatch(frameData.cmdBuffer, (m_width + 7) / 8, (m_height + 7) / 8, 1);
-
-	vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-			.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-			.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-			.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-			.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-			.image = m_swapchainImages[imageIndex],
-			.subresourceRange = colorSubresourceRange()
-		})
-	}));
+			})
+			}));
+	}
 
 	vkEndCommandBuffer(frameData.cmdBuffer);
 

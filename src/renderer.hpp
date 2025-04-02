@@ -37,6 +37,7 @@ class Renderer {
 		static constexpr f32 m_maxPitch = 89.0f; // in deg
 		static constexpr VkFormat m_colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 		static constexpr VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
+		static constexpr VkFormat m_uiFormat = VK_FORMAT_R8G8B8A8_UNORM;
 
 		static const inline std::unordered_map<fastgltf::Filter, VkFilter> m_filterMap = {
 			{ fastgltf::Filter::Nearest, VK_FILTER_NEAREST },
@@ -173,6 +174,7 @@ class Renderer {
 		VkDescriptorSetLayout m_oneTexOneImageSetLayout = {};
 		VkPipelineLayout m_oneTexOneImagePipelineLayout = {};
 		
+		VkDescriptorSetLayout m_threeImageSetLayout = {};
 		VkPipelineLayout m_postprocessingPipelineLayout = {};
 
 		VkPipeline m_mipPipeline = {};
@@ -188,6 +190,7 @@ class Renderer {
 		Buffer m_oitBuffer;
 		Image m_colorTarget;
 		Image m_depthTarget;
+		Image m_uiTarget;
 		Model m_model;
 
 		Skybox m_skybox;
@@ -198,6 +201,9 @@ class Renderer {
 
 		b8 m_flycam = false;
 		b8 m_firstClick = true;
+
+		// ImGui
+		i32 m_camIdx = 0;
 		f32 m_fov = 90.0f;
 		f32 m_speed = 1.44f;
 		f32 m_sensitivity = 100.0f;
