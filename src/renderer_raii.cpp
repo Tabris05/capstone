@@ -291,14 +291,14 @@ Renderer::Renderer() {
 
 	// compute pipelines
 	{
-		m_mipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/mip.comp.spv");
-		m_srgbMipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/srgbmip.comp.spv");
-		m_cubePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/cube.comp.spv");
-		m_cubeMipPipeline = createComputePipeline(m_twoImagePipelineLayout, "shaders/cubemip.comp.spv");
-		m_irradiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/irradiance.comp.spv");
-		m_radiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "shaders/radiance.comp.spv");
-		m_brdfIntegralPipeline = createComputePipeline(m_oneImagePipelineLayout, "shaders/brdfintegral.comp.spv");
-		m_postprocessingPipeline = createComputePipeline(m_postprocessingPipelineLayout, "shaders/postprocess.comp.spv");
+		m_mipPipeline = createComputePipeline(m_twoImagePipelineLayout, "resources/shaders/mip.comp.spv");
+		m_srgbMipPipeline = createComputePipeline(m_twoImagePipelineLayout, "resources/shaders/srgbmip.comp.spv");
+		m_cubePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "resources/shaders/cube.comp.spv");
+		m_cubeMipPipeline = createComputePipeline(m_twoImagePipelineLayout, "resources/shaders/cubemip.comp.spv");
+		m_irradiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "resources/shaders/irradiance.comp.spv");
+		m_radiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "resources/shaders/radiance.comp.spv");
+		m_brdfIntegralPipeline = createComputePipeline(m_oneImagePipelineLayout, "resources/shaders/brdfintegral.comp.spv");
+		m_postprocessingPipeline = createComputePipeline(m_postprocessingPipelineLayout, "resources/shaders/postprocess.comp.spv");
 	}
 
 	// global samplers
@@ -478,14 +478,14 @@ Renderer::Renderer() {
 			})
 		}), nullptr, &m_modelPipelineLayout);
 
-		m_opaquePipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/model.vert.spv", "shaders/opaque.frag.spv", VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_EQUAL, false, true);
-		m_blendPipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/model.vert.spv", "shaders/blend.frag.spv", VK_CULL_MODE_NONE, VK_COMPARE_OP_GREATER, false, false);
+		m_opaquePipeline = createGraphicsPipeline(m_modelPipelineLayout, "resources/shaders/model.vert.spv", "resources/shaders/opaque.frag.spv", VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_EQUAL, false, true);
+		m_blendPipeline = createGraphicsPipeline(m_modelPipelineLayout, "resources/shaders/model.vert.spv", "resources/shaders/blend.frag.spv", VK_CULL_MODE_NONE, VK_COMPARE_OP_GREATER, false, false);
 	}
 
 	// Depth Only Pipelines
 	{
-		m_prepassPipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/prepass.vert.spv", std::filesystem::path(), VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
-		m_shadowPipeline = createGraphicsPipeline(m_modelPipelineLayout, "shaders/shadow.vert.spv", std::filesystem::path(), VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
+		m_prepassPipeline = createGraphicsPipeline(m_modelPipelineLayout, "resources/shaders/prepass.vert.spv", std::filesystem::path(), VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
+		m_shadowPipeline = createGraphicsPipeline(m_modelPipelineLayout, "resources/shaders/shadow.vert.spv", std::filesystem::path(), VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
 	}
 
 	// Skybox Pipeline
@@ -511,7 +511,7 @@ Renderer::Renderer() {
 			})
 		}), nullptr, &m_skyboxPipelineLayout);
 
-		m_skyboxPipeline = createGraphicsPipeline(m_skyboxPipelineLayout, "shaders/skybox.vert.spv", "shaders/skybox.frag.spv", VK_CULL_MODE_NONE, VK_COMPARE_OP_EQUAL, false, true);
+		m_skyboxPipeline = createGraphicsPipeline(m_skyboxPipelineLayout, "resources/shaders/skybox.vert.spv", "resources/shaders/skybox.frag.spv", VK_CULL_MODE_NONE, VK_COMPARE_OP_EQUAL, false, true);
 	}
 
 	// ImGui
@@ -534,6 +534,69 @@ Renderer::Renderer() {
 				.pColorAttachmentFormats = &m_uiFormat
 			}
 		}));
+	}
+
+	// ImGui Styling
+	{
+		ImGuiIO& io = ImGui::GetIO();
+		ImGuiStyle& style = ImGui::GetStyle();
+
+		ImFont* font = io.Fonts->AddFontFromFileTTF("resources/fonts/Roboto-Regular.ttf", 18);
+		//ImGui::PushFont(font);
+
+		style.WindowMinSize = ImVec2(160, 20);
+		style.FramePadding = ImVec2(4, 2);
+		style.ItemSpacing = ImVec2(6, 2);
+		style.ItemInnerSpacing = ImVec2(6, 4);
+		style.Alpha = 0.95f;
+		style.WindowRounding = 4.0f;
+		style.FrameRounding = 2.0f;
+		style.IndentSpacing = 6.0f;
+		style.ItemInnerSpacing = ImVec2(2, 4);
+		style.ColumnsMinSpacing = 50.0f;
+		style.GrabMinSize = 14.0f;
+		style.GrabRounding = 16.0f;
+		style.ScrollbarSize = 12.0f;
+		style.ScrollbarRounding = 16.0f;
+
+		style.Colors[ImGuiCol_Text] = ImVec4(0.86f, 0.93f, 0.89f, 0.78f);
+		style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.86f, 0.93f, 0.89f, 0.28f);
+		style.Colors[ImGuiCol_WindowBg] = ImVec4(0.13f, 0.14f, 0.17f, 1.00f);
+		style.Colors[ImGuiCol_Border] = ImVec4(0.31f, 0.31f, 1.00f, 0.00f);
+		style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+		style.Colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.22f, 0.27f, 1.00f);
+		style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.92f, 0.18f, 0.29f, 0.78f);
+		style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.92f, 0.18f, 0.29f, 1.00f);
+		style.Colors[ImGuiCol_TitleBg] = ImVec4(0.20f, 0.22f, 0.27f, 1.00f);
+		style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.20f, 0.22f, 0.27f, 0.75f);
+		style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.92f, 0.18f, 0.29f, 1.00f);
+		style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.20f, 0.22f, 0.27f, 0.47f);
+		style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.20f, 0.22f, 0.27f, 1.00f);
+		style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.09f, 0.15f, 0.16f, 1.00f);
+		style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.92f, 0.18f, 0.29f, 0.78f);
+		style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.92f, 0.18f, 0.29f, 1.00f);
+		style.Colors[ImGuiCol_CheckMark] = ImVec4(0.71f, 0.22f, 0.27f, 1.00f);
+		style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.47f, 0.77f, 0.83f, 0.14f);
+		style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.92f, 0.18f, 0.29f, 1.00f);
+		style.Colors[ImGuiCol_Button] = ImVec4(0.47f, 0.77f, 0.83f, 0.14f);
+		style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.92f, 0.18f, 0.29f, 0.86f);
+		style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.92f, 0.18f, 0.29f, 1.00f);
+		style.Colors[ImGuiCol_Header] = ImVec4(0.92f, 0.18f, 0.29f, 0.76f);
+		style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.92f, 0.18f, 0.29f, 0.86f);
+		style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.92f, 0.18f, 0.29f, 1.00f);
+		style.Colors[ImGuiCol_Separator] = ImVec4(0.14f, 0.16f, 0.19f, 1.00f);
+		style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.92f, 0.18f, 0.29f, 0.78f);
+		style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.92f, 0.18f, 0.29f, 1.00f);
+		style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.47f, 0.77f, 0.83f, 0.04f);
+		style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.92f, 0.18f, 0.29f, 0.78f);
+		style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.92f, 0.18f, 0.29f, 1.00f);
+		style.Colors[ImGuiCol_PlotLines] = ImVec4(0.86f, 0.93f, 0.89f, 0.63f);
+		style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.92f, 0.18f, 0.29f, 1.00f);
+		style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.86f, 0.93f, 0.89f, 0.63f);
+		style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.92f, 0.18f, 0.29f, 1.00f);
+		style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.92f, 0.18f, 0.29f, 0.43f);
+		style.Colors[ImGuiCol_PopupBg] = ImVec4(0.20f, 0.22f, 0.27f, 0.9f);
+		style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.20f, 0.22f, 0.27f, 0.73f);
 	}
 
 	// Load Model

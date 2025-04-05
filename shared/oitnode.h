@@ -4,7 +4,7 @@
 #ifdef __cplusplus
 	#include <tbrs/types.hpp>
 #else
-	#include "../shaders/types.glsl"
+	#include "../resources/shaders/types.glsl"
 #endif
 
 struct OITNode {

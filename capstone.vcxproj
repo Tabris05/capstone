@@ -180,23 +180,28 @@
     <ClInclude Include="src\renderer.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\blend.frag" />
-    <None Include="shaders\brdfintegral.comp" />
-    <None Include="shaders\cube.comp" />
-    <None Include="shaders\cubemip.comp" />
-    <None Include="shaders\irradiance.comp" />
-    <None Include="shaders\mip.comp" />
-    <None Include="shaders\model.vert" />
-    <None Include="shaders\opaque.frag" />
-    <None Include="shaders\pbr.glsl" />
-    <None Include="shaders\postprocess.comp" />
-    <None Include="shaders\prepass.vert" />
-    <None Include="shaders\radiance.comp" />
-    <None Include="shaders\skybox.frag" />
-    <None Include="shaders\skybox.vert" />
-    <None Include="shaders\srgbmip.comp" />
-    <None Include="shaders\types.glsl" />
-    <None Include="shaders\utils.glsl" />
+    <None Include="resources\shaders\blend.frag" />
+    <None Include="resources\shaders\brdfintegral.comp" />
+    <None Include="resources\shaders\cube.comp" />
+    <None Include="resources\shaders\cubemip.comp" />
+    <None Include="resources\shaders\extensions.glsl" />
+    <None Include="resources\shaders\irradiance.comp" />
+    <None Include="resources\shaders\mip.comp" />
+    <None Include="resources\shaders\model.vert" />
+    <None Include="resources\shaders\opaque.frag" />
+    <None Include="resources\shaders\pbr.glsl" />
+    <None Include="resources\shaders\postprocess.comp" />
+    <None Include="resources\shaders\prepass.vert" />
+    <None Include="resources\shaders\radiance.comp" />
+    <None Include="resources\shaders\shadow.vert" />
+    <None Include="resources\shaders\skybox.frag" />
+    <None Include="resources\shaders\skybox.vert" />
+    <None Include="resources\shaders\srgbmip.comp" />
+    <None Include="resources\shaders\types.glsl" />
+    <None Include="resources\shaders\utils.glsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Font Include="resources\fonts\Roboto-Regular.ttf" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

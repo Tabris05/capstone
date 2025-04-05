@@ -2,9 +2,9 @@
 #define PBR_GLSL
 
 #include "utils.glsl"
-#include "../shared/material.h"
-#include "../shared/oitnode.h"
-#include "../shared/vertex.h"
+#include "../../shared/material.h"
+#include "../../shared/oitnode.h"
+#include "../../shared/vertex.h"
 
 #define PI 3.141593f
 #define EPSILON 0.000001f

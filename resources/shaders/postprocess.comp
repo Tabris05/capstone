@@ -2,7 +2,7 @@
 
 #include "extensions.glsl"
 
-#include "../shared/oitnode.h"
+#include "../../shared/oitnode.h"
 
 #include "utils.glsl"
 

@@ -2,8 +2,8 @@
 
 #include "extensions.glsl"
 
-#include "../shared/vertex.h"
-#include "../shared/material.h"
+#include "../../shared/vertex.h"
+#include "../../shared/material.h"
 
 #define SHADOW_MAP_TEXEL_SIZE 1.0f / 2048.0f
 

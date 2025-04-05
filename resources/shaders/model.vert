@@ -3,7 +3,7 @@
 #include "types.glsl"
 #include "extensions.glsl"
 
-#include "../shared/vertex.h"
+#include "../../shared/vertex.h"
 
 layout(location = 0) out vec4 outPositionLight;
 layout(location = 1) out vec3 outPosition;

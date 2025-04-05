@@ -2,8 +2,8 @@
 
 #include "extensions.glsl"
 
-#include "../shared/vertex.h"
-#include "../shared/material.h"
+#include "../../shared/vertex.h"
+#include "../../shared/material.h"
 
 layout(buffer_reference, scalar) restrict readonly buffer VertexBuffer {
     Vertex vertices[];

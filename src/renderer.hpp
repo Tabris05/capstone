@@ -204,13 +204,14 @@ class Renderer {
 
 		// ImGui
 		i32 m_camIdx = 0;
+		i32 m_colorIdx = 0;
 		f32 m_fov = 90.0f;
 		f32 m_speed = 1.44f;
-		f32 m_sensitivity = 100.0f;
-		f32 m_scrollSensitivity = 0.1f;
+		f32 m_sensitivity = 0.5f;
+		f32 m_scrollSensitivity = 0.5f;
 		f32 m_scroll = 0.0f;
 		glm::vec3 m_position{ 0.0f, 0.0f, 2.0f };
-		glm::vec3 m_rotation{ 0.0f, 0.0f,  1.0f };
+		glm::vec3 m_rotation{ 0.0f, 0.0f,  -1.0f };
 		glm::vec3 m_lightAngle{ 0.0f, 0.0f, 1.0f };
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);

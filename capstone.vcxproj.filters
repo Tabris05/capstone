@@ -19,6 +19,12 @@
     <Filter Include="Header Files\Shared">
       <UniqueIdentifier>{4d61035e-8ece-4bb1-b8b2-3d95e85aa0ee}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resource Files\Fonts">
+      <UniqueIdentifier>{767933a5-0111-4c46-b06c-60dc9e941b35}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\Shaders">
+      <UniqueIdentifier>{a08e34c5-558a-4816-ba7f-285d6d2cdc94}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp">
@@ -88,56 +94,67 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\brdfintegral.comp">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\brdfintegral.comp">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\cube.comp">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\cube.comp">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\cubemip.comp">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\cubemip.comp">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\irradiance.comp">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\irradiance.comp">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\mip.comp">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\mip.comp">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\postprocess.comp">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\postprocess.comp">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\radiance.comp">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\radiance.comp">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\srgbmip.comp">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\srgbmip.comp">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\blend.frag">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\blend.frag">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\opaque.frag">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\opaque.frag">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\skybox.frag">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\skybox.frag">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\pbr.glsl">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\extensions.glsl">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\types.glsl">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\pbr.glsl">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\utils.glsl">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\types.glsl">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\model.vert">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\utils.glsl">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\skybox.vert">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\model.vert">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\prepass.vert">
-      <Filter>Resource Files</Filter>
+    <None Include="resources\shaders\prepass.vert">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
+    <None Include="resources\shaders\shadow.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="resources\shaders\skybox.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Font Include="resources\fonts\Roboto-Regular.ttf">
+      <Filter>Resource Files\Fonts</Filter>
+    </Font>
   </ItemGroup>
 </Project>

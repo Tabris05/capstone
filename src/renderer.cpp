@@ -69,8 +69,8 @@ void Renderer::handleInput(f32 deltaTime) {
 			f64 mouseX, mouseY;
 			glfwGetCursorPos(m_window, &mouseX, &mouseY);
 
-			f32 rotX = m_sensitivity * static_cast<f32>(mouseX - (m_width / 2)) / m_width;
-			f32 rotY = m_sensitivity * static_cast<f32>(mouseY - (m_height / 2)) / m_height;
+			f32 rotX = m_sensitivity * 200.0f * static_cast<f32>(mouseX - (m_width / 2)) / m_width;
+			f32 rotY = m_sensitivity * 200.0f * static_cast<f32>(mouseY - (m_height / 2)) / m_height;
 
 			f32 oldPitch = glm::degrees(std::asin(m_rotation.y));
 			f32 newPitch = glm::clamp(oldPitch - rotY, -m_maxPitch, m_maxPitch);
@@ -102,13 +102,13 @@ void Renderer::handleInput(f32 deltaTime) {
 			f32 yaw = glm::degrees(std::atan2(m_position.x, m_position.z));
 			f32 pitch = glm::degrees(std::asin(m_position.y / distance));
 
-			f32 rotX = m_sensitivity * static_cast<f32>(mouseX - (m_width / 2)) / m_width;
-			f32 rotY = m_sensitivity * static_cast<f32>(mouseY - (m_height / 2)) / m_height;
+			f32 rotX = m_sensitivity * 200.0f * static_cast<f32>(mouseX - (m_width / 2)) / m_width;
+			f32 rotY = m_sensitivity * 200.0f * static_cast<f32>(mouseY - (m_height / 2)) / m_height;
 
 			yaw -= rotX;
 			pitch = glm::clamp(pitch + rotY, -m_maxPitch, m_maxPitch);
 
-			distance = std::max(distance - m_scroll * m_scrollSensitivity, std::numeric_limits<f32>::epsilon());
+			distance = std::max(distance - m_scroll * m_scrollSensitivity * 0.2f, std::numeric_limits<f32>::epsilon());
 			m_scroll = 0.0;
 
 			m_position.x = distance * std::cos(glm::radians(pitch)) * std::sin(glm::radians(yaw));
@@ -134,13 +134,34 @@ void Renderer::render() {
 	ImGui::NewFrame();
 
 	// camera Menu
-	ImGui::Begin("Camera");
-	ImGui::Text("Camera Control Scheme");
-	if(ImGui::Combo("##combo0", &m_camIdx, ptr({ "Orbital", "Flycam" }), 2)) {
-		m_flycam = m_camIdx == 1;
+	{
+		ImGui::Begin("Camera");
+		ImGui::Text("Controls");
+		if(ImGui::Combo("Input Method", &m_camIdx, ptr({ "Orbital", "Flycam" }), 2)) {
+			m_flycam = m_camIdx == 1;
+			if(!m_flycam) {
+				m_rotation = glm::normalize(-m_position);
+			}
+		}
+
+		ImGui::SliderFloat("Look Sensitivity", &m_sensitivity, 0.1f, 1.0f);
+		ImGui::SliderFloat("Scroll Sensitivity", &m_scrollSensitivity, 0.1f, 1.0f);
+
+		ImGui::NewLine();
+		ImGui::Text("Display");
+		ImGui::SliderFloat("Field Of View", &m_fov, 60.0f, 120.0f);
+		ImGui::Combo("Color Grading", &m_colorIdx, ptr({ "AgX" }), 1);
+
+		ImGui::End();
 	}
-	ImGui::End();
+
+
+	{
+
+	}
+
 	ImGui::Render();
+
 
 	f32 orthoSize = std::sqrt(2.0f);
 	glm::mat4 model = m_model.baseTransform;
@@ -195,7 +216,7 @@ void Renderer::render() {
 				.image = m_shadowMap.image,
 				.subresourceRange = depthSubresourceRange()
 			})
-			}));
+		}));
 
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
 			.renderArea = { 0, 0, { static_cast<u32>(m_shadowMapSize), static_cast<u32>(m_shadowMapSize) } },
@@ -207,7 +228,7 @@ void Renderer::render() {
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 				.clearValue = { 0.0f }
 			})
-			}));
+		}));
 
 		if(m_model.numOpaqueDrawCommands > 0) {
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
@@ -244,7 +265,7 @@ void Renderer::render() {
 					.subresourceRange = depthSubresourceRange()
 				}
 			})
-			}));
+		}));
 
 		vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
 		vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
@@ -259,7 +280,7 @@ void Renderer::render() {
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 				.clearValue = { 0.0f }
 			})
-			}));
+		}));
 
 		if(m_model.numOpaqueDrawCommands > 0) {
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_prepassPipeline);
@@ -294,7 +315,7 @@ void Renderer::render() {
 					.subresourceRange = depthSubresourceRange()
 				}
 			})
-			}));
+		}));
 
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
 			.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
@@ -313,7 +334,7 @@ void Renderer::render() {
 				.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			})
-			}));
+		}));
 
 		if(m_model.numOpaqueDrawCommands > 0) {
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_opaquePipeline);
@@ -358,7 +379,7 @@ void Renderer::render() {
 						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 					})
 				}
-				}));
+			}));
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 		}
 
@@ -393,7 +414,7 @@ void Renderer::render() {
 					.buffer = m_oitBuffer.buffer,
 					.size = VK_WHOLE_SIZE
 				})
-				}));
+			}));
 
 			vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
 				.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
@@ -404,7 +425,7 @@ void Renderer::render() {
 					.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 					.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 				})
-				}));
+			}));
 
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_blendPipeline);
 
@@ -449,7 +470,7 @@ void Renderer::render() {
 						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 					})
 				}
-				}));
+			}));
 			vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
 
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, m_model.numOpaqueDrawCommands * sizeof(VkDrawIndexedIndirectCommand), m_model.numBlendDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
@@ -466,7 +487,7 @@ void Renderer::render() {
 					.buffer = m_oitBuffer.buffer,
 					.size = VK_WHOLE_SIZE
 				}),
-				}));
+			}));
 		}
 		else {
 			vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
@@ -479,7 +500,7 @@ void Renderer::render() {
 					.buffer = m_oitBuffer.buffer,
 					.size = VK_WHOLE_SIZE
 				}),
-				}));
+			}));
 		}
 	}
 
@@ -516,7 +537,7 @@ void Renderer::render() {
 					.subresourceRange = colorSubresourceRange()
 				}
 			})
-			}));
+		}));
 
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
 			.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
@@ -529,7 +550,7 @@ void Renderer::render() {
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 				.clearValue = { 0.0f, 0.0f, 0.0f, 0.0f }
 			})
-			}));
+		}));
 
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), frameData.cmdBuffer);
 
@@ -552,7 +573,7 @@ void Renderer::render() {
 					.subresourceRange = colorSubresourceRange()
 				},
 			})
-			}));
+		}));
 
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipeline);
 
@@ -576,7 +597,7 @@ void Renderer::render() {
 					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 				}
 			})
-			}));
+		}));
 
 		vkCmdDispatch(frameData.cmdBuffer, (m_width + 7) / 8, (m_height + 7) / 8, 1);
 
@@ -590,7 +611,7 @@ void Renderer::render() {
 				.image = m_swapchainImages[imageIndex],
 				.subresourceRange = colorSubresourceRange()
 			})
-			}));
+		}));
 	}
 
 	vkEndCommandBuffer(frameData.cmdBuffer);
@@ -616,7 +637,7 @@ void Renderer::render() {
 		.swapchainCount = 1,
 		.pSwapchains = &m_swapchain,
 		.pImageIndices = &imageIndex
-		}));
+	}));
 
 	if(result != VK_SUCCESS || m_swapchainDirty) {
 		recreateSwapchain();
