@@ -161,23 +161,37 @@ void Renderer::render() {
 		ImGui::Begin("Lighting");
 		ImGui::ColorPicker3("Light Color", &m_lightColor.x, ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_DisplayRGB);
 		ImGui::SliderFloat("Light Intensity", &m_lightColor.w, 0.0f, 10.0f);
-		ImGui::SliderFloat("Light Pitch", &m_pitch, -0.5f, 0.5f);
-		ImGui::SliderFloat("Light Yaw", &m_yaw, -0.5f, 0.5f);
+		ImGui::SliderFloat("Light Pitch", &m_lightPitch, -0.5f, 0.5f);
+		ImGui::SliderFloat("Light Yaw", &m_lightYaw, -0.5f, 0.5f);
 		ImGui::End();
 
-		f32 pitch = m_pitch * 2.0f * std::numbers::pi_v<f32>;
-		f32 yaw = m_yaw * 2.0f * std::numbers::pi_v<f32>;
+		f32 pitch = m_lightPitch * 2.0f * std::numbers::pi_v<f32>;
+		f32 yaw = m_lightYaw * 2.0f * std::numbers::pi_v<f32>;
 
 		m_lightAngle.x = std::cos(pitch) * std::sin(yaw);
 		m_lightAngle.y = std::sin(pitch);
 		m_lightAngle.z = std::cos(pitch) * std::cos(yaw);
 	}
 
+	// model menu
+	{
+		ImGui::Begin("Model");
+		ImGui::SliderFloat("Model Scale", &m_modelScale, 0.1f, 5.0f);
+		ImGui::SliderFloat("Model Pitch", &m_modelPitch, -0.5f, 0.5f);
+		ImGui::SliderFloat("Model Yaw", &m_modelYaw, -0.5f, 0.5f);
+		ImGui::SliderFloat("Model Roll", &m_modelRoll, -0.5f, 0.5f);
+		ImGui::End();
+	}
+
 	ImGui::Render();
 
 
-	f32 orthoSize = std::sqrt(2.0f) / 2.0f;
-	glm::mat4 model = m_model.baseTransform;
+	f32 orthoSize = std::sqrt(2.0f) / 2.0f * m_modelScale;
+	glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(m_modelScale))
+		* glm::rotate(glm::mat4(1.0f), m_modelPitch * 2.0f * std::numbers::pi_v<f32>, glm::vec3(1.0f, 0.0f, 0.0f))
+		* glm::rotate(glm::mat4(1.0f), m_modelYaw * 2.0f * std::numbers::pi_v<f32>, glm::vec3(0.0f, 1.0f, 0.0f))
+		* glm::rotate(glm::mat4(1.0f), m_modelRoll * 2.0f * std::numbers::pi_v<f32>, glm::vec3(0.0f, 0.0f, 1.0f))
+		* m_model.baseTransform;
 	glm::mat4 view = glm::lookAt(m_position, m_flycam ? m_position + m_rotation : glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
 	glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f), m_lightAngle, glm::vec3(0.0f, 1.0f, 0.0f));

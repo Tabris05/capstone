@@ -210,8 +210,12 @@ class Renderer {
 		f32 m_sensitivity = 0.5f;
 		f32 m_scrollSensitivity = 0.5f;
 		f32 m_scroll = 0.0f;
-		f32 m_pitch = 0.0f;
-		f32 m_yaw = 0.0f;
+		f32 m_lightPitch = 0.0f;
+		f32 m_lightYaw = 0.0f;
+		f32 m_modelPitch = 0.0f;
+		f32 m_modelYaw = 0.0f;
+		f32 m_modelRoll = 0.0f;
+		f32 m_modelScale = 1.0f;
 		glm::vec3 m_position{ 0.0f, 0.0f, 2.0f };
 		glm::vec3 m_rotation{ 0.0f, 0.0f,  -1.0f };
 		glm::vec3 m_lightAngle{ 0.0f, 0.0f, 1.0f };
