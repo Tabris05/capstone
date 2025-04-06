@@ -18,6 +18,7 @@ struct PBRMaterial {
     vec4 albedo;
     vec3 emission;
     vec3 normal;
+    vec3 geometricNormal;
     f32 occlusion;
     f32 metallic;
     f32 roughness;
@@ -96,8 +97,8 @@ vec3 fresnelSchlickRoughness(f32 cosTheta, vec3 f0, float alpha) {
 
 f32 inShadow(vec3 lightspacePos, vec3 normal) {
     f32 result = 0.0f;
-    lightspacePos.xy = lightspacePos.xy * 0.5f + 0.5f;
     f32 bias = mix(0.02f, 0.0f, dot(normal, pcs.lightAngle));
+    lightspacePos.xy = lightspacePos.xy * 0.5f + 0.5f;
     ivec3 indexOffset = ivec3(0, ivec2(mod(gl_FragCoord.xy, ivec2(WINDOWSIZE))));
     
     for(i32 i = 0; i < FILTERSIZE; i++) {
@@ -122,7 +123,7 @@ f32 inShadow(vec3 lightspacePos, vec3 normal) {
 }
 
 vec3 directionalLight(vec3 view, vec3 light, vec3 lightspacePos, vec3 lightColor, PBRMaterial mat) {
-    f32 shadow = inShadow(lightspacePos, mat.normal);
+    f32 shadow = inShadow(lightspacePos, mat.geometricNormal);
 
     if(shadow == 0.0f) {
         return vec3(0.0f);
@@ -164,7 +165,8 @@ PBRMaterial getPBRMaterial(Material mat, vec2 inUV) {
         result.emission *= texture(nonuniformEXT(imageHeap[mat.emissiveIndex]), inUV).rgb;
     }
 
-    result.normal = normalize(inNormal);
+    result.geometricNormal = normalize(inNormal);
+    result.normal = result.geometricNormal;
     if(bitmaskGet(mat.texBitfield, HAS_NORMAL)) {
         result.normal = normalize(mat3(normalize(inTangent), normalize(inBitangent), result.normal) * (texture(nonuniformEXT(imageHeap[mat.normalIndex]), inUV).rgb * 2.0f - 1.0f));
     }

@@ -35,12 +35,12 @@ inline glm::mat4 perspective(f32 fovy, f32 aspect, f32 zNear) {
     );
 }
 
-inline glm::mat4 ortho(f32 left, f32 right, f32 top, f32 bottom, f32 zNear, f32 zFar) {
+inline glm::mat4 ortho(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar) {
     return glm::mat4(
          2.0f / (right - left),            0.0f,                             0.0f,                  0.0f,
-         0.0f,                             2.0f / (top - bottom),            0.0f,                  0.0f,
+         0.0f,                             2.0f / (bottom - top),            0.0f,                  0.0f,
          0.0f,                             0.0f,                             1.0f / (zNear - zFar), 0.0f,
-        -(right + left) / (right - left), -(top + bottom) / (top - bottom), -zFar / (zNear - zFar), 1.0f
+        -(right + left) / (right - left), -(bottom + top) / (bottom - top), -zFar / (zNear - zFar), 1.0f
     );
 }
 

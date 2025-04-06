@@ -6,6 +6,7 @@
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_vulkan.h>
+#include <numbers>
 
 void Renderer::run() {
 	f32 thisFrame = 0.0f;
@@ -155,20 +156,32 @@ void Renderer::render() {
 		ImGui::End();
 	}
 
-
+	// lighting menu
 	{
+		ImGui::Begin("Lighting");
+		ImGui::ColorPicker3("Light Color", &m_lightColor.x, ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_DisplayRGB);
+		ImGui::SliderFloat("Light Intensity", &m_lightColor.w, 0.0f, 10.0f);
+		ImGui::SliderFloat("Light Pitch", &m_pitch, -0.5f, 0.5f);
+		ImGui::SliderFloat("Light Yaw", &m_yaw, -0.5f, 0.5f);
+		ImGui::End();
 
+		f32 pitch = m_pitch * 2.0f * std::numbers::pi_v<f32>;
+		f32 yaw = m_yaw * 2.0f * std::numbers::pi_v<f32>;
+
+		m_lightAngle.x = std::cos(pitch) * std::sin(yaw);
+		m_lightAngle.y = std::sin(pitch);
+		m_lightAngle.z = std::cos(pitch) * std::cos(yaw);
 	}
 
 	ImGui::Render();
 
 
-	f32 orthoSize = std::sqrt(2.0f);
+	f32 orthoSize = std::sqrt(2.0f) / 2.0f;
 	glm::mat4 model = m_model.baseTransform;
 	glm::mat4 view = glm::lookAt(m_position, m_flycam ? m_position + m_rotation : glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
 	glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f), m_lightAngle, glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::mat4 lightProjection = ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, -orthoSize, orthoSize);
+	glm::mat4 lightProjection = ortho(orthoSize, -orthoSize, -orthoSize, orthoSize, -orthoSize, orthoSize);
 	glm::mat4 camMatrixNoTranslation = projection * glm::mat4(glm::mat3(view));
 
 	PushConstants pushConstants = {
@@ -179,7 +192,7 @@ void Renderer::render() {
 		projection * view,
 		lightProjection * lightView,
 		model,
-		glm::vec4(1.0f),
+		m_lightColor,
 		m_position,
 		m_lightAngle,
 		m_width

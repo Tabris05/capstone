@@ -210,9 +210,12 @@ class Renderer {
 		f32 m_sensitivity = 0.5f;
 		f32 m_scrollSensitivity = 0.5f;
 		f32 m_scroll = 0.0f;
+		f32 m_pitch = 0.0f;
+		f32 m_yaw = 0.0f;
 		glm::vec3 m_position{ 0.0f, 0.0f, 2.0f };
 		glm::vec3 m_rotation{ 0.0f, 0.0f,  -1.0f };
 		glm::vec3 m_lightAngle{ 0.0f, 0.0f, 1.0f };
+		glm::vec4 m_lightColor{ 1.0f, 1.0f, 1.0f, 1.0f };
 
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
 		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);
