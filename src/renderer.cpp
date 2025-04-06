@@ -17,7 +17,7 @@ void Renderer::run() {
 		if(const ImGuiIO& io = ImGui::GetIO(); !io.WantCaptureMouse && !io.WantCaptureKeyboard) {
 			handleInput(thisFrame - lastFrame);
 		}
-		render();
+		render(thisFrame);
 
 		lastFrame = thisFrame;
 		thisFrame = glfwGetTime();
@@ -127,7 +127,7 @@ void Renderer::handleInput(f32 deltaTime) {
 	}
 }
 
-void Renderer::render() {
+void Renderer::render(f32 thisFrame) {
 
 
 	ImGui_ImplVulkan_NewFrame();
@@ -180,6 +180,24 @@ void Renderer::render() {
 		ImGui::SliderFloat("Model Pitch", &m_modelPitch, -0.5f, 0.5f);
 		ImGui::SliderFloat("Model Yaw", &m_modelYaw, -0.5f, 0.5f);
 		ImGui::SliderFloat("Model Roll", &m_modelRoll, -0.5f, 0.5f);
+		ImGui::End();
+	}
+
+	// options menu
+	{
+		ImGui::Begin("Options");
+
+		ImGui::Combo("Antialiasing", &m_AAIdx, ptr({ "None" }), 1);
+
+		b8 vsyncBefore = m_vsync;
+		ImGui::Checkbox("Enable Vsync", &m_vsync);
+		if(m_vsync != vsyncBefore) {
+			m_swapchainDirty = true;
+		}
+
+		ImGui::NewLine();
+		ImGui::Text("%.0f FPS, %.2fms", m_fpsLastSecond, 1000.0 / m_fpsLastSecond);
+
 		ImGui::End();
 	}
 
@@ -671,4 +689,11 @@ void Renderer::render() {
 	}
 
 	m_frameIndex = (m_frameIndex + 1) % m_framesInFlight;
+
+	m_framesThisSecond++;
+	if(thisFrame - m_lastSecond >= 1.0f) {
+		m_fpsLastSecond = m_framesThisSecond / (thisFrame - m_lastSecond);
+		m_lastSecond = thisFrame;
+		m_framesThisSecond = 0;
+	}
 }

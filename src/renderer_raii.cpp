@@ -158,6 +158,18 @@ Renderer::Renderer() {
 		glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface);
 		vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, ptr(1u), &m_surfaceFormat);
 
+		u32 count = 0;
+		vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface, &count, nullptr);
+		std::vector<VkPresentModeKHR> modes(count);
+		vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface, &count, modes.data());
+
+		for(auto mode : modes) {
+			if(mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+				m_nonVsyncPresentMode == VK_PRESENT_MODE_MAILBOX_KHR;
+				break;
+			}
+		}
+
 		createSwapchain();
 	}
 

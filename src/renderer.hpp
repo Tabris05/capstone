@@ -141,6 +141,7 @@ class Renderer {
 
 		VkSurfaceKHR m_surface = {};
 		VkSurfaceFormatKHR m_surfaceFormat;
+		VkPresentModeKHR m_nonVsyncPresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 		VkSwapchainKHR m_swapchain = {};
 		std::vector<VkImage> m_swapchainImages;
 		std::vector<VkImageView> m_swapchainImageViews;
@@ -199,25 +200,33 @@ class Renderer {
 		VkSampler m_skyboxSampler = {};
 		VkSampler m_shadowSampler = {};
 
+		// timing
+		u32 m_framesThisSecond = 0;
+		f32 m_fpsLastSecond = 0.0;
+		f32 m_lastSecond = 0.0;
+
+		// movement
 		b8 m_flycam = false;
 		b8 m_firstClick = true;
+		f32 m_speed = 1.44f;
+		f32 m_scroll = 0.0f;
+		glm::vec3 m_position{ 0.0f, 0.0f, 2.0f };
+		glm::vec3 m_rotation{ 0.0f, 0.0f,  -1.0f };
 
 		// ImGui
+		b8 m_vsync = true;
 		i32 m_camIdx = 0;
 		i32 m_colorIdx = 0;
+		i32 m_AAIdx = 0;
 		f32 m_fov = 90.0f;
-		f32 m_speed = 1.44f;
 		f32 m_sensitivity = 0.5f;
 		f32 m_scrollSensitivity = 0.5f;
-		f32 m_scroll = 0.0f;
 		f32 m_lightPitch = 0.0f;
 		f32 m_lightYaw = 0.0f;
 		f32 m_modelPitch = 0.0f;
 		f32 m_modelYaw = 0.0f;
 		f32 m_modelRoll = 0.0f;
 		f32 m_modelScale = 1.0f;
-		glm::vec3 m_position{ 0.0f, 0.0f, 2.0f };
-		glm::vec3 m_rotation{ 0.0f, 0.0f,  -1.0f };
 		glm::vec3 m_lightAngle{ 0.0f, 0.0f, 1.0f };
 		glm::vec4 m_lightColor{ 1.0f, 1.0f, 1.0f, 1.0f };
 
@@ -243,7 +252,7 @@ class Renderer {
 		VkPipeline createGraphicsPipeline(VkPipelineLayout layout, std::filesystem::path vsPath, std::filesystem::path fsPath, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment);
 
 		void handleInput(f32 deltaTime);
-		void render();
+		void render(f32 thisFrame);
 };
 
 #endif
