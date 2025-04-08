@@ -11,6 +11,9 @@
 #include <unordered_map>
 #include <fastgltf/types.hpp>
 #include <nfd/nfd.h>
+#include <imgui/imgui.h>
+#include <future>
+#include <queue>
 
 class Renderer {
 	public:
@@ -115,14 +118,16 @@ class Renderer {
 			VkSemaphore acquireSem;
 			VkSemaphore presentSem;
 			VkFence fence;
+			std::queue<std::function<void(void)>> deletionQueue;
 		} m_perFrameData[m_framesInFlight];
 
-
+		// window
 		i32 m_width;
 		i32 m_height;
 		GLFWwindow* m_window;
 		nfdwindowhandle_t m_nativeHandle;
 
+		// vulkan
 		u8 m_frameIndex = 0;
 		b8 m_swapchainDirty = false;
 
@@ -200,6 +205,15 @@ class Renderer {
 		VkSampler m_skyboxSampler = {};
 		VkSampler m_shadowSampler = {};
 
+		// asset loading
+		b8 m_loadingModel = false;
+		std::future<Model> m_modelFuture;
+
+		b8 m_loadingSkybox = false;
+		std::future<Skybox> m_skyboxFuture;
+
+		std::mutex m_asyncComputeLock;
+
 		// timing
 		u32 m_framesThisSecond = 0;
 		f32 m_fpsLastSecond = 0.0;
@@ -230,6 +244,8 @@ class Renderer {
 		glm::vec3 m_lightAngle{ 0.0f, 0.0f, 1.0f };
 		glm::vec4 m_lightColor{ 1.0f, 1.0f, 1.0f, 1.0f };
 
+		ImFont* m_largeFont = nullptr;
+
 		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
 		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);
 		std::vector<u32> getShaderSource(std::filesystem::path);
@@ -242,10 +258,10 @@ class Renderer {
 		Buffer createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps);
 		void destroyBuffer(Buffer buffer);
 
-		void createModel(std::filesystem::path path);
+		Model createModel(std::filesystem::path path);
 		void destroyModel(Model model);
 
-		void createSkybox(std::filesystem::path path);
+		Skybox createSkybox(std::filesystem::path path);
 		void destroySkybox(Skybox skybox);
 
 		VkPipeline createComputePipeline(VkPipelineLayout layout, std::filesystem::path shaderPath);

@@ -11,7 +11,7 @@
 #include <execution>
 #include <tbrs/vk_util.hpp>
 
-void Renderer::createModel(std::filesystem::path path) {
+Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	const fastgltf::Extensions extensions =
 		fastgltf::Extensions::KHR_materials_emissive_strength;
 
@@ -433,6 +433,7 @@ void Renderer::createModel(std::filesystem::path path) {
 		})
 	}), nullptr);
 
+	m_asyncComputeLock.lock();
 	vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
 		.waitSemaphoreInfoCount = 1,
 		.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
@@ -442,6 +443,7 @@ void Renderer::createModel(std::filesystem::path path) {
 		.commandBufferInfoCount = 1,
 		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmd })
 	}), nullptr);
+	m_asyncComputeLock.unlock();
 
 	vkQueueWaitIdle(m_transferQueue);
 
@@ -464,7 +466,7 @@ void Renderer::createModel(std::filesystem::path path) {
 
 	vkResetCommandPool(m_device, m_computePool, 0);
 
-	m_model = Model{ std::move(images), std::move(samplers), pool, set, materialBuffer, vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, opaqueDrawCmds.size(), blendDrawCmds.size() };
+	return Model{ std::move(images), std::move(samplers), pool, set, materialBuffer, vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, opaqueDrawCmds.size(), blendDrawCmds.size() };
 }
 
 void Renderer::destroyModel(Model model) {

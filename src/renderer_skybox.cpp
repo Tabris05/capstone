@@ -2,11 +2,10 @@
 #include <stb/stb_image.h>
 #include <tbrs/vk_util.hpp>
 
-void Renderer::createSkybox(std::filesystem::path path) {
+Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 	i32 width;
 	i32 height;
 	f32* pixels = stbi_loadf(path.string().c_str(), &width, &height, nullptr, STBI_rgb_alpha);
-	auto reason = stbi_failure_reason();
 	i32 cubeSize = height / 2;
 	u64 byteSize = width * height * 4 * sizeof(f32);
 	Buffer stagingBuffer = createBuffer(byteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -288,6 +287,7 @@ void Renderer::createSkybox(std::filesystem::path path) {
 
 	vkEndCommandBuffer(m_computeCmd);
 
+	m_asyncComputeLock.lock();
 	vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
 		.waitSemaphoreInfoCount = 1,
 		.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
@@ -297,6 +297,7 @@ void Renderer::createSkybox(std::filesystem::path path) {
 		.commandBufferInfoCount = 1,
 		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmd })
 	}), nullptr);
+	m_asyncComputeLock.unlock();
 
 	vkQueueWaitIdle(m_transferQueue);
 	vkResetCommandPool(m_device, m_transferPool, 0);
@@ -316,7 +317,7 @@ void Renderer::createSkybox(std::filesystem::path path) {
 	environmentMap.view = environmentMapView;
 	irradianceMap.view = irradianceMapView;
 	radianceMap.view = radianceMapView;
-	m_skybox = Skybox{ environmentMap, irradianceMap, radianceMap };
+	return Skybox{ environmentMap, irradianceMap, radianceMap };
 }
 
 void Renderer::destroySkybox(Skybox skybox) {

@@ -3,9 +3,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtx/vector_angle.hpp>
-#include <imgui/imgui.h>
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_vulkan.h>
+#include <imgui/imgui_spinner.h>
 #include <numbers>
 
 void Renderer::run() {
@@ -186,7 +186,6 @@ void Renderer::render(f32 thisFrame) {
 	// options menu
 	{
 		ImGui::Begin("Options");
-
 		ImGui::Combo("Antialiasing", &m_AAIdx, ptr({ "None" }), 1);
 
 		b8 vsyncBefore = m_vsync;
@@ -197,12 +196,83 @@ void Renderer::render(f32 thisFrame) {
 
 		ImGui::NewLine();
 		ImGui::Text("%.0f FPS, %.2fms", m_fpsLastSecond, 1000.0 / m_fpsLastSecond);
+		
+		ImGui::End();
+	}
+
+	// scene menu
+	{
+		ImGui::Begin("Scene");
+
+		ImGui::BeginDisabled(m_loadingModel);
+		if(ImGui::Button("Load Model")) {
+			m_loadingModel = true;
+			m_modelFuture = std::async(std::launch::async, [this] {
+				nfdu8char_t* outPath;
+
+				nfdopendialogu8args_t args = { 0 };
+				nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
+					.filterList = ptr({ nfdu8filteritem_t{ "glTF Binary", "glb" }, nfdu8filteritem_t{ "glTF Seperate", "gltf" } }),
+					.filterCount = 2,
+					.parentWindow = m_nativeHandle
+				}));
+
+				Model model;
+
+				if(result == NFD_OKAY) {
+					model = createModel(outPath);
+					NFD_FreePathU8(outPath);
+				}
+
+				return model;
+			});
+		}
+		ImGui::EndDisabled();
+
+		ImGui::SameLine();
+		
+		ImGui::BeginDisabled(m_loadingSkybox);
+		if(ImGui::Button("Load Environment Map")) {
+			m_loadingSkybox = true;
+			m_skyboxFuture = std::async(std::launch::async, [this] {
+				nfdu8char_t* outPath;
+
+				nfdopendialogu8args_t args = { 0 };
+				nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
+					.filterList = ptr(nfdu8filteritem_t{ "Environment Map", "hdr" }),
+					.filterCount = 1,
+					.parentWindow = m_nativeHandle
+				}));
+
+				Skybox skybox;
+				if(result == NFD_OKAY) {
+					skybox = createSkybox(outPath);
+					NFD_FreePathU8(outPath);
+				}
+
+				return skybox;
+			});
+		}
+		ImGui::EndDisabled();
 
 		ImGui::End();
 	}
 
+	if(m_loadingModel || m_loadingSkybox) {
+		ImGuiIO& io = ImGui::GetIO();
+		ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+		ImGui::Begin("##loadingWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize |
+			ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+			ImGuiWindowFlags_NoNav);
+		ImGui::PushFont(m_largeFont);
+		ImGui::Text("Loading...");
+		ImGui::PopFont();
+		ImGui::SameLine();
+		ImGui::Spinner("##spinner", 18.0f, 6.0f, ImVec4(0.92f, 0.18f, 0.29f, 1.00f));
+		ImGui::End();
+	}
 	ImGui::Render();
-
 
 	f32 orthoSize = std::sqrt(2.0f) / 2.0f * m_modelScale;
 	glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(m_modelScale))
@@ -230,8 +300,13 @@ void Renderer::render(f32 thisFrame) {
 		m_width
 	};
 
-	auto frameData = m_perFrameData[m_frameIndex];
+	auto& frameData = m_perFrameData[m_frameIndex];
 	vkWaitForFences(m_device, 1, &frameData.fence, true, std::numeric_limits<u64>::max());
+
+	while(!frameData.deletionQueue.empty()) {
+		frameData.deletionQueue.front()();
+		frameData.deletionQueue.pop();
+	}
 
 	u32 imageIndex;
 	VkResult result = vkAcquireNextImageKHR(m_device, m_swapchain, std::numeric_limits<u64>::max(), frameData.acquireSem, nullptr, &imageIndex);
@@ -686,6 +761,24 @@ void Renderer::render(f32 thisFrame) {
 
 	if(result != VK_SUCCESS || m_swapchainDirty) {
 		recreateSwapchain();
+	}
+
+	if(m_loadingModel && m_modelFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+		m_loadingModel = false;
+		Model tmp = m_modelFuture.get();
+		if(tmp.vertexBuffer.buffer != VkBuffer{}) {
+			std::swap(tmp, m_model);
+			frameData.deletionQueue.push([this, tmp] { destroyModel(tmp); });
+		}
+	}
+
+	if(m_loadingSkybox && m_skyboxFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+		m_loadingSkybox = false;
+		Skybox tmp = m_skyboxFuture.get();
+		if(tmp.environmentMap.image != VkImage{}) {
+			std::swap(tmp, m_skybox);
+			frameData.deletionQueue.push([this, tmp] { destroySkybox(tmp); });
+		}
 	}
 
 	m_frameIndex = (m_frameIndex + 1) % m_framesInFlight;

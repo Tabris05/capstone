@@ -553,7 +553,8 @@ Renderer::Renderer() {
 		ImGuiIO& io = ImGui::GetIO();
 		ImGuiStyle& style = ImGui::GetStyle();
 
-		ImFont* font = io.Fonts->AddFontFromFileTTF("resources/fonts/Roboto-Regular.ttf", 18);
+		io.Fonts->AddFontFromFileTTF("resources/fonts/Roboto-Regular.ttf", 18);
+		m_largeFont = io.Fonts->AddFontFromFileTTF("resources/fonts/Roboto-Regular.ttf", 36);
 		//ImGui::PushFont(font);
 
 		style.WindowMinSize = ImVec2(160, 20);
@@ -609,40 +610,6 @@ Renderer::Renderer() {
 		style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.92f, 0.18f, 0.29f, 0.43f);
 		style.Colors[ImGuiCol_PopupBg] = ImVec4(0.20f, 0.22f, 0.27f, 0.9f);
 		style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.20f, 0.22f, 0.27f, 0.73f);
-	}
-
-	// Load Model
-	{
-		nfdu8char_t* outPath;
-
-		nfdopendialogu8args_t args = { 0 };
-		nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
-			.filterList = ptr({ nfdu8filteritem_t{ "glTF Binary", "glb" }, nfdu8filteritem_t{ "glTF Seperate", "gltf" } }),
-			.filterCount = 2,
-			.parentWindow = m_nativeHandle
-		}));
-
-		if(result == NFD_OKAY) {
-			createModel(outPath);
-			NFD_FreePathU8(outPath);
-		}
-	}
-
-	// Load Environment Map
-	{
-		nfdu8char_t* outPath;
-
-		nfdopendialogu8args_t args = { 0 };
-		nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
-			.filterList = ptr(nfdu8filteritem_t{ "Environment Map", "hdr" }),
-			.filterCount = 1,
-			.parentWindow = m_nativeHandle
-		}));
-
-		if(result == NFD_OKAY) {
-			createSkybox(outPath);
-			NFD_FreePathU8(outPath);
-		}
 	}
 }
 
