@@ -128,8 +128,6 @@ void Renderer::handleInput(f32 deltaTime) {
 }
 
 void Renderer::render(f32 thisFrame) {
-
-
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
@@ -145,12 +143,12 @@ void Renderer::render(f32 thisFrame) {
 			}
 		}
 
-		ImGui::SliderFloat("Look Sensitivity", &m_sensitivity, 0.1f, 1.0f);
-		ImGui::SliderFloat("Scroll Sensitivity", &m_scrollSensitivity, 0.1f, 1.0f);
+		ImGui::SliderFloat("Look Sensitivity", &m_sensitivity, 0.1f, 1.0f, nullptr, ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat("Scroll Sensitivity", &m_scrollSensitivity, 0.1f, 1.0f, nullptr, ImGuiSliderFlags_AlwaysClamp);
 
 		ImGui::NewLine();
 		ImGui::Text("Display");
-		ImGui::SliderFloat("Field Of View", &m_fov, 60.0f, 120.0f);
+		ImGui::SliderFloat("Field Of View", &m_fov, 60.0f, 120.0f, nullptr, ImGuiSliderFlags_AlwaysClamp);
 		ImGui::Combo("Color Grading", &m_colorIdx, ptr({ "AgX" }), 1);
 
 		ImGui::End();
@@ -160,9 +158,9 @@ void Renderer::render(f32 thisFrame) {
 	{
 		ImGui::Begin("Lighting");
 		ImGui::ColorPicker3("Light Color", &m_lightColor.x, ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_DisplayRGB);
-		ImGui::SliderFloat("Light Intensity", &m_lightColor.w, 0.0f, 10.0f);
-		ImGui::SliderFloat("Light Pitch", &m_lightPitch, -0.5f, 0.5f);
-		ImGui::SliderFloat("Light Yaw", &m_lightYaw, -0.5f, 0.5f);
+		ImGui::SliderFloat("Light Intensity", &m_lightColor.w, 0.0f, 10.0f, nullptr, ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat("Light Pitch", &m_lightPitch, -0.5f, 0.5f, nullptr, ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat("Light Yaw", &m_lightYaw, -0.5f, 0.5f, nullptr, ImGuiSliderFlags_AlwaysClamp);
 		ImGui::End();
 
 		f32 pitch = m_lightPitch * 2.0f * std::numbers::pi_v<f32>;
@@ -176,10 +174,10 @@ void Renderer::render(f32 thisFrame) {
 	// model menu
 	{
 		ImGui::Begin("Model");
-		ImGui::SliderFloat("Model Scale", &m_modelScale, 0.1f, 5.0f);
-		ImGui::SliderFloat("Model Pitch", &m_modelPitch, -0.5f, 0.5f);
-		ImGui::SliderFloat("Model Yaw", &m_modelYaw, -0.5f, 0.5f);
-		ImGui::SliderFloat("Model Roll", &m_modelRoll, -0.5f, 0.5f);
+		ImGui::SliderFloat("Model Scale", &m_modelScale, 0.1f, 5.0f, nullptr, ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat("Model Pitch", &m_modelPitch, -0.5f, 0.5f, nullptr, ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat("Model Yaw", &m_modelYaw, -0.5f, 0.5f, nullptr, ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat("Model Roll", &m_modelRoll, -0.5f, 0.5f, nullptr, ImGuiSliderFlags_AlwaysClamp);
 		ImGui::End();
 	}
 
@@ -261,10 +259,9 @@ void Renderer::render(f32 thisFrame) {
 	if(m_loadingModel || m_loadingSkybox) {
 		ImGuiIO& io = ImGui::GetIO();
 		ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-		ImGui::Begin("##loadingWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize |
-			ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
-			ImGuiWindowFlags_NoNav);
+		ImGui::Begin("##loadingWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize
+			| ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav
+		);
 		ImGui::PushFont(m_largeFont);
 		ImGui::Text("Loading...");
 		ImGui::PopFont();
