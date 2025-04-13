@@ -93,7 +93,7 @@ void Renderer::handleInput(f32 deltaTime) {
 
 			if(m_firstClick) {
 				m_firstClick = false;
-				glfwSetCursorPos(m_window, m_width / 2, m_height / 2);
+				glfwSetCursorPos(m_window, m_width / 2.0, m_height / 2.0);
 			}
 
 			f64 mouseX, mouseY;
@@ -149,7 +149,7 @@ void Renderer::render(f32 thisFrame) {
 		ImGui::NewLine();
 		ImGui::Text("Display");
 		ImGui::SliderFloat("Field Of View", &m_fov, 60.0f, 120.0f, nullptr, ImGuiSliderFlags_AlwaysClamp);
-		ImGui::Combo("Color Grading", &m_colorIdx, ptr({ "AgX" }), 1);
+		ImGui::Combo("Color Grading", &m_colorIdx, ptr({ "ACES", "AgX", "Khronos PBR Neutral", "Reinhard" }), 4);
 
 		ImGui::End();
 	}
@@ -694,8 +694,8 @@ void Renderer::render(f32 thisFrame) {
 
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipeline);
 
-		VkDeviceAddress postprocessingPCs = m_model.numBlendDrawCommands != 0 ? m_oitBuffer.devicePtr : VkDeviceAddress{};
-		vkCmdPushConstants(frameData.cmdBuffer, m_postprocessingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VkDeviceAddress), &postprocessingPCs);
+		PostProcessingPCs postprocessingPCs = { m_model.numBlendDrawCommands != 0 ? m_oitBuffer.devicePtr : VkDeviceAddress{}, m_colorIdx };
+		vkCmdPushConstants(frameData.cmdBuffer, m_postprocessingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PostProcessingPCs), &postprocessingPCs);
 
 		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
 			.descriptorCount = 3,

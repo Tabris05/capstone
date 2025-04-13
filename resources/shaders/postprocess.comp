@@ -16,6 +16,7 @@ layout(buffer_reference, scalar) restrict buffer OITBuffer {
 
 layout(push_constant, scalar) uniform constants {
     OITBuffer oitBuffer;
+    u32 tonemapper;
 } pcs;
 
 layout(local_size_x = 8, local_size_y = 8) in;
@@ -35,5 +36,22 @@ void main() {
     }
 
     vec4 uiColor = imageLoad(uiBuffer, ivec2(gl_GlobalInvocationID));
-    imageStore(swapchain, ivec2(gl_GlobalInvocationID), vec4(mix(agx(color), uiColor.rgb, uiColor.a), 1.0f));
+    vec3 srgb = vec3(0.0f);
+
+    switch(pcs.tonemapper) {
+        case 0:
+            srgb = linearToSrgb(aces(color));
+            break;
+        case 1:
+            srgb = agx(color);
+            break;
+        case 2:
+            srgb = linearToSrgb(khronos(color));
+            break;
+        default:
+            srgb = linearToSrgb(reinhard(color));
+            break;
+    }
+
+    imageStore(swapchain, ivec2(gl_GlobalInvocationID), vec4(mix(srgb, uiColor.rgb, uiColor.a), 1.0f));
 }

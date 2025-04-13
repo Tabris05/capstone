@@ -7,7 +7,6 @@
 #include "../../shared/vertex.h"
 
 #define PI 3.141593f
-#define EPSILON 0.000001f
 
 // for shadow map filtering
 #define WINDOWSIZE 8

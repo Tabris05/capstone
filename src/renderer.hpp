@@ -112,6 +112,11 @@ class Renderer {
 			u32 frameBufferWidth;
 		};
 
+		struct PostProcessingPCs {
+			VkDeviceAddress oitBuffer;
+			u32 tonemapper;
+		};
+
 		struct {
 			VkCommandPool cmdPool;
 			VkCommandBuffer cmdBuffer;
