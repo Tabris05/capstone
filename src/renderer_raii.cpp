@@ -6,9 +6,10 @@
 #include <imgui/imgui_impl_vulkan.h>
 #include <random>
 #include <numbers>
+#include <fstream>
 #include "../shared/vertex.h"
 
-Renderer::Renderer() {
+Renderer::Renderer(const char* path) {
 	// glfw and NFD
 	{
 		glfwInit();
@@ -636,6 +637,45 @@ Renderer::Renderer() {
 		style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.92f, 0.18f, 0.29f, 0.43f);
 		style.Colors[ImGuiCol_PopupBg] = ImVec4(0.20f, 0.22f, 0.27f, 0.9f);
 		style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.20f, 0.22f, 0.27f, 0.73f);
+	}
+
+	if(path) {
+		m_loadingScene = true;
+		m_loadingSceneFuture = std::async(std::launch::async, [this, path] {
+			std::ifstream file(path, std::ios::binary);
+
+			auto readVariable = [&file](auto& var) {
+				file.read(reinterpret_cast<char*>(&var), sizeof(var));
+			};
+
+			readVariable(m_scroll);
+			readVariable(m_position);
+			readVariable(m_rotation);
+			readVariable(m_vsync);
+			readVariable(m_camIdx);
+			readVariable(m_colorIdx);
+			readVariable(m_AAIdx);
+			readVariable(m_fov);
+			readVariable(m_sensitivity);
+			readVariable(m_scrollSensitivity);
+			readVariable(m_lightPitch);
+			readVariable(m_lightYaw);
+			readVariable(m_modelPitch);
+			readVariable(m_modelYaw);
+			readVariable(m_modelRoll);
+			readVariable(m_modelScale);
+			readVariable(m_lightAngle);
+			readVariable(m_lightColor);
+
+			u64 size = 0;
+			readVariable(size);
+			m_modelPath.resize(size);
+			file.read(m_modelPath.data(), size);
+
+			readVariable(size);
+			m_skyboxPath.resize(size);
+			file.read(m_skyboxPath.data(), size);
+		});
 	}
 }
 

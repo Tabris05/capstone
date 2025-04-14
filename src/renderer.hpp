@@ -17,7 +17,7 @@
 
 class Renderer {
 	public:
-		Renderer();
+		Renderer(const char* path);
 		~Renderer();
 	
 		Renderer(const Renderer&) = delete;
