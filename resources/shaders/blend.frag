@@ -35,17 +35,19 @@ void main() {
 
     beginInvocationInterlockARB();
 
-    for(u32 i = 0; i < 4; i++) {
-        if(unpackDepth(pcs.oitBuffer.nodes[baseIndex + i].packedDepthTransmittance) < unpackTransmittance(cur.packedDepthTransmittance)) {
-            swapNodes(pcs.oitBuffer.nodes[baseIndex + i], cur);
+    if(!gl_HelperInvocation) {
+        for(u32 i = 0; i < 4; i++) {
+            if(unpackDepth(pcs.oitBuffer.nodes[baseIndex + i].packedDepthTransmittance) < unpackTransmittance(cur.packedDepthTransmittance)) {
+                swapNodes(pcs.oitBuffer.nodes[baseIndex + i], cur);
+            }
         }
-    }
-    if(cur.packedDepthTransmittance != 0) {
-        OITNode last = pcs.oitBuffer.nodes[baseIndex + 3];
-        f32 lastDepth = unpackDepth(last.packedDepthTransmittance);
-        f32 lastTransmittance = unpackTransmittance(last.packedDepthTransmittance);
-        pcs.oitBuffer.nodes[baseIndex + 3].packedColor = packe5bgr9(vec4(mix(unpacke5bgr9(last.packedColor).rgb, unpacke5bgr9(cur.packedColor).rgb, lastTransmittance), 1.0f));
-        pcs.oitBuffer.nodes[baseIndex + 3].packedDepthTransmittance = packDepthTransmittance(lastDepth, lastTransmittance * unpackTransmittance(cur.packedDepthTransmittance));
+        if(cur.packedDepthTransmittance != 0) {
+            OITNode last = pcs.oitBuffer.nodes[baseIndex + 3];
+            f32 lastDepth = unpackDepth(last.packedDepthTransmittance);
+            f32 lastTransmittance = unpackTransmittance(last.packedDepthTransmittance);
+            pcs.oitBuffer.nodes[baseIndex + 3].packedColor = packe5bgr9(vec4(mix(unpacke5bgr9(last.packedColor).rgb, unpacke5bgr9(cur.packedColor).rgb, lastTransmittance), 1.0f));
+            pcs.oitBuffer.nodes[baseIndex + 3].packedDepthTransmittance = packDepthTransmittance(lastDepth, lastTransmittance * unpackTransmittance(cur.packedDepthTransmittance));
+        }
     }
 
     endInvocationInterlockARB();

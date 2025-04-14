@@ -267,6 +267,10 @@ void Renderer::render(f32 thisFrame) {
 					.parentWindow = m_nativeHandle
 				}));
 
+				if(result != NFD_OKAY) {
+					return;
+				}
+
 				std::ofstream file(outPath, std::ios::binary);
 				NFD_FreePathU8(outPath);
 
@@ -313,8 +317,11 @@ void Renderer::render(f32 thisFrame) {
 					.parentWindow = m_nativeHandle
 				}));
 
-				std::ifstream file(outPath, std::ios::binary);
-				NFD_FreePathU8(outPath);
+				if(result != NFD_OKAY) {
+					return;
+				}
+					std::ifstream file(outPath, std::ios::binary);
+					NFD_FreePathU8(outPath);
 
 				auto readVariable = [&file](auto& var) {
 					file.read(reinterpret_cast<char*>(&var), sizeof(var));
@@ -355,7 +362,7 @@ void Renderer::render(f32 thisFrame) {
 	}
 	ImGui::EndDisabled();
 
-	if(m_loadingModel || m_loadingSkybox) {
+	if(m_loadingModel || m_loadingSkybox || m_loadingScene) {
 		ImGuiIO& io = ImGui::GetIO();
 		ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 		ImGui::Begin("##loadingWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize
