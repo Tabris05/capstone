@@ -41,8 +41,8 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 	AABB aabb;
 
-	vkBeginCommandBuffer(m_transferCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
-	vkBeginCommandBuffer(m_computeCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	vkBeginCommandBuffer(m_transferCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	vkBeginCommandBuffer(m_computeCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 
 	for(const fastgltf::Material& mat : asset.materials) {
 		Material m = {
@@ -88,7 +88,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	
 	memcpy(stagingMaterialBuffer.hostPtr, materials.data(), materialBufferByteSize);
 
-	vkCmdCopyBuffer(m_transferCmd, stagingMaterialBuffer.buffer, materialBuffer.buffer, 1, ptr(VkBufferCopy{ .size = materialBufferByteSize }));
+	vkCmdCopyBuffer(m_transferCmdModelThread, stagingMaterialBuffer.buffer, materialBuffer.buffer, 1, ptr(VkBufferCopy{ .size = materialBufferByteSize }));
 
 	for(const auto& [idx, img] : std::views::enumerate(asset.images)) {
 		i32 width;
@@ -106,7 +106,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		Image image = createImage(width, height, isSrgb[idx] ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, numMips);
 		images.push_back(image);
 
-		vkCmdPipelineBarrier2(m_transferCmd, ptr(VkDependencyInfo{
+		vkCmdPipelineBarrier2(m_transferCmdModelThread, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 				.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
@@ -117,7 +117,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 			})
 		}));
 
-		vkCmdCopyBufferToImage2(m_transferCmd, ptr(VkCopyBufferToImageInfo2{
+		vkCmdCopyBufferToImage2(m_transferCmdModelThread, ptr(VkCopyBufferToImageInfo2{
 			.srcBuffer = stagingBuffer.buffer,
 			.dstImage = image.image,
 			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -128,7 +128,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 			})
 		}));
 
-		vkCmdPipelineBarrier2(m_transferCmd, ptr(VkDependencyInfo{
+		vkCmdPipelineBarrier2(m_transferCmdModelThread, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 				.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
@@ -149,7 +149,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		}), nullptr, &mip0View);
 		mipViews.push_back(mip0View);
 
-		vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, isSrgb[idx] ? m_srgbMipPipeline: m_mipPipeline);
+		vkCmdBindPipeline(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, isSrgb[idx] ? m_srgbMipPipeline: m_mipPipeline);
 		for(u8 i = 1; i < numMips; i++) {
 			VkImageView curMipView;
 			vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
@@ -159,7 +159,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 				.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 }
 			}), nullptr, &curMipView);
 
-			vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_twoImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+			vkCmdPushDescriptorSet(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_twoImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
 				.descriptorCount = 2,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 				.pImageInfo = ptr({
@@ -175,9 +175,9 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 			}));
 			mipViews.push_back(curMipView);
 
-			vkCmdDispatch(m_computeCmd, (std::max(width >> i, 1) + 7) / 8, (std::max(height >> i, 1) + 7) / 8, 1);
+			vkCmdDispatch(m_computeCmdModelThread, (std::max(width >> i, 1) + 7) / 8, (std::max(height >> i, 1) + 7) / 8, 1);
 
-			vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+			vkCmdPipelineBarrier2(m_computeCmdModelThread, ptr(VkDependencyInfo{
 				.imageMemoryBarrierCount = 1,
 				.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -190,7 +190,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 			}));
 		}
 
-		vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+		vkCmdPipelineBarrier2(m_computeCmdModelThread, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -203,7 +203,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		}));
 	}
 
-	vkEndCommandBuffer(m_computeCmd);
+	vkEndCommandBuffer(m_computeCmdModelThread);
 
 	for(const fastgltf::Sampler& s : asset.samplers) {
 		VkSampler sampler;
@@ -418,34 +418,37 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	memcpy(stagingIndirectBuffer.hostPtr, opaqueDrawCmds.data(), opaqueIndirectBufferByteSize);
 	memcpy(reinterpret_cast<char*>(stagingIndirectBuffer.hostPtr) + opaqueIndirectBufferByteSize, blendDrawCmds.data(), blendIndirectBufferByteSize);
 	
-	vkCmdCopyBuffer(m_transferCmd, stagingVertexBuffer.buffer, vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = vertexBufferByteSize }));
-	vkCmdCopyBuffer(m_transferCmd, stagingIndexBuffer.buffer, indexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indexBufferByteSize }));
-	vkCmdCopyBuffer(m_transferCmd, stagingIndirectBuffer.buffer, indirectBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indirectBufferByteSize }));
-	vkEndCommandBuffer(m_transferCmd);
+	vkCmdCopyBuffer(m_transferCmdModelThread, stagingVertexBuffer.buffer, vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = vertexBufferByteSize }));
+	vkCmdCopyBuffer(m_transferCmdModelThread, stagingIndexBuffer.buffer, indexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indexBufferByteSize }));
+	vkCmdCopyBuffer(m_transferCmdModelThread, stagingIndirectBuffer.buffer, indirectBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indirectBufferByteSize }));
+	vkEndCommandBuffer(m_transferCmdModelThread);
 
+	m_dmaTransferLock.lock();
 	vkQueueSubmit2(m_transferQueue, 1, ptr(VkSubmitInfo2{
 		.commandBufferInfoCount = 1,
-		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmd }),
+		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmdModelThread }),
 		.signalSemaphoreInfoCount = 1,
 		.pSignalSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
-			.semaphore = m_transferToComputeSem,
+			.semaphore = m_transferToComputeSemModelThread,
 			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
 		})
-	}), nullptr);
+	}), m_transferFenceModelThread);
+	m_dmaTransferLock.unlock();
 
 	m_asyncComputeLock.lock();
 	vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
 		.waitSemaphoreInfoCount = 1,
 		.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
-			.semaphore = m_transferToComputeSem,
+			.semaphore = m_transferToComputeSemModelThread,
 			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
 		}),
 		.commandBufferInfoCount = 1,
-		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmd })
-	}), nullptr);
+		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmdModelThread })
+	}), m_computeFenceModelThread);
 	m_asyncComputeLock.unlock();
 
-	vkQueueWaitIdle(m_transferQueue);
+	vkWaitForFences(m_device, 1, &m_transferFenceModelThread, true, std::numeric_limits<u64>::max());
+	vkResetFences(m_device, 1, &m_transferFenceModelThread);
 
 	for(Buffer i : imageStagingBuffers) {
 		destroyBuffer(i);
@@ -456,15 +459,16 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	destroyBuffer(stagingIndexBuffer);
 	destroyBuffer(stagingIndirectBuffer);
 
-	vkResetCommandPool(m_device, m_transferPool, 0);
+	vkResetCommandPool(m_device, m_transferPoolModelThread, 0);
 
-	vkQueueWaitIdle(m_computeQueue);
+	vkWaitForFences(m_device, 1, &m_computeFenceModelThread, true, std::numeric_limits<u64>::max());
+	vkResetFences(m_device, 1, &m_computeFenceModelThread);
 
 	for(VkImageView i : mipViews) {
 		vkDestroyImageView(m_device, i, nullptr);
 	}
 
-	vkResetCommandPool(m_device, m_computePool, 0);
+	vkResetCommandPool(m_device, m_computePoolModelThread, 0);
 
 	return Model{ std::move(images), std::move(samplers), pool, set, materialBuffer, vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, opaqueDrawCmds.size(), blendDrawCmds.size() };
 }

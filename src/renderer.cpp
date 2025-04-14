@@ -7,6 +7,7 @@
 #include <imgui/imgui_impl_vulkan.h>
 #include <imgui/imgui_spinner.h>
 #include <numbers>
+#include <fstream>
 
 void Renderer::run() {
 	f32 thisFrame = 0.0f;
@@ -132,6 +133,7 @@ void Renderer::render(f32 thisFrame) {
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
+	ImGui::BeginDisabled(m_savingScene);
 	// camera Menu
 	{
 		ImGui::Begin("Camera");
@@ -202,13 +204,12 @@ void Renderer::render(f32 thisFrame) {
 	{
 		ImGui::Begin("Scene");
 
-		ImGui::BeginDisabled(m_loadingModel);
+		ImGui::BeginDisabled(m_loadingModel || m_loadingScene);
 		if(ImGui::Button("Load Model")) {
 			m_loadingModel = true;
 			m_modelFuture = std::async(std::launch::async, [this] {
 				nfdu8char_t* outPath;
 
-				nfdopendialogu8args_t args = { 0 };
 				nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
 					.filterList = ptr({ nfdu8filteritem_t{ "glTF Binary", "glb" }, nfdu8filteritem_t{ "glTF Seperate", "gltf" } }),
 					.filterCount = 2,
@@ -218,6 +219,7 @@ void Renderer::render(f32 thisFrame) {
 				Model model;
 
 				if(result == NFD_OKAY) {
+					m_modelPath = outPath;
 					model = createModel(outPath);
 					NFD_FreePathU8(outPath);
 				}
@@ -229,13 +231,12 @@ void Renderer::render(f32 thisFrame) {
 
 		ImGui::SameLine();
 		
-		ImGui::BeginDisabled(m_loadingSkybox);
+		ImGui::BeginDisabled(m_loadingSkybox || m_loadingScene);
 		if(ImGui::Button("Load Environment Map")) {
 			m_loadingSkybox = true;
 			m_skyboxFuture = std::async(std::launch::async, [this] {
 				nfdu8char_t* outPath;
 
-				nfdopendialogu8args_t args = { 0 };
 				nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
 					.filterList = ptr(nfdu8filteritem_t{ "Environment Map", "hdr" }),
 					.filterCount = 1,
@@ -244,6 +245,7 @@ void Renderer::render(f32 thisFrame) {
 
 				Skybox skybox;
 				if(result == NFD_OKAY) {
+					m_skyboxPath = outPath;
 					skybox = createSkybox(outPath);
 					NFD_FreePathU8(outPath);
 				}
@@ -253,8 +255,105 @@ void Renderer::render(f32 thisFrame) {
 		}
 		ImGui::EndDisabled();
 
+		ImGui::BeginDisabled(m_loadingModel || m_loadingSkybox || m_savingScene || m_loadingScene);
+		if(ImGui::Button("Save Scene")) {
+			m_savingScene = true;
+			m_savingSceneFuture = std::async(std::launch::async, [this] {
+				nfdu8char_t* outPath;
+
+				nfdresult_t result = NFD_SaveDialogU8_With(&outPath, ptr(nfdsavedialogu8args_t{
+					.filterList = ptr(nfdu8filteritem_t{ "vkModelViewer Scene", "mvs" }),
+					.filterCount = 1,
+					.parentWindow = m_nativeHandle
+				}));
+
+				std::ofstream file(outPath, std::ios::binary);
+				NFD_FreePathU8(outPath);
+
+				auto writeVariable = [&file](const auto& var) {
+					file.write(reinterpret_cast<const char*>(&var), sizeof(var));
+				};
+
+				writeVariable(m_scroll);
+				writeVariable(m_position);
+				writeVariable(m_rotation);
+				writeVariable(m_vsync);
+				writeVariable(m_camIdx);
+				writeVariable(m_colorIdx);
+				writeVariable(m_AAIdx);
+				writeVariable(m_fov);
+				writeVariable(m_sensitivity);
+				writeVariable(m_scrollSensitivity);
+				writeVariable(m_lightPitch);
+				writeVariable(m_lightYaw);
+				writeVariable(m_modelPitch);
+				writeVariable(m_modelYaw);
+				writeVariable(m_modelRoll);
+				writeVariable(m_modelScale);
+				writeVariable(m_lightAngle);
+				writeVariable(m_lightColor);
+				writeVariable(m_modelPath.size());
+				file.write(m_modelPath.data(), m_modelPath.size());
+				writeVariable(m_skyboxPath.size());
+				file.write(m_skyboxPath.data(), m_skyboxPath.size());
+			});
+		}
+		ImGui::EndDisabled();
+
+		ImGui::SameLine();
+		ImGui::BeginDisabled(m_loadingModel || m_loadingSkybox);
+		if(ImGui::Button("Load Scene")) {
+			m_loadingScene = true;
+			m_loadingSceneFuture = std::async(std::launch::async, [this] {
+				nfdu8char_t* outPath;
+
+				nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
+					.filterList = ptr(nfdu8filteritem_t{ "vkModelViewer Scene", "mvs" }),
+					.filterCount = 1,
+					.parentWindow = m_nativeHandle
+				}));
+
+				std::ifstream file(outPath, std::ios::binary);
+				NFD_FreePathU8(outPath);
+
+				auto readVariable = [&file](auto& var) {
+					file.read(reinterpret_cast<char*>(&var), sizeof(var));
+				};
+
+				readVariable(m_scroll);
+				readVariable(m_position);
+				readVariable(m_rotation);
+				readVariable(m_vsync);
+				readVariable(m_camIdx);
+				readVariable(m_colorIdx);
+				readVariable(m_AAIdx);
+				readVariable(m_fov);
+				readVariable(m_sensitivity);
+				readVariable(m_scrollSensitivity);
+				readVariable(m_lightPitch);
+				readVariable(m_lightYaw);
+				readVariable(m_modelPitch);
+				readVariable(m_modelYaw);
+				readVariable(m_modelRoll);
+				readVariable(m_modelScale);
+				readVariable(m_lightAngle);
+				readVariable(m_lightColor);
+
+				u64 size = 0;
+				readVariable(size);
+				m_modelPath.resize(size);
+				file.read(m_modelPath.data(), size);
+
+				readVariable(size);
+				m_skyboxPath.resize(size);
+				file.read(m_skyboxPath.data(), size);
+			});
+		}
+		ImGui::EndDisabled();
+
 		ImGui::End();
 	}
+	ImGui::EndDisabled();
 
 	if(m_loadingModel || m_loadingSkybox) {
 		ImGuiIO& io = ImGui::GetIO();
@@ -264,6 +363,19 @@ void Renderer::render(f32 thisFrame) {
 		);
 		ImGui::PushFont(m_largeFont);
 		ImGui::Text("Loading...");
+		ImGui::PopFont();
+		ImGui::SameLine();
+		ImGui::Spinner("##spinner", 18.0f, 6.0f, ImVec4(0.92f, 0.18f, 0.29f, 1.00f));
+		ImGui::End();
+	}
+	else if(m_savingScene) {
+		ImGuiIO& io = ImGui::GetIO();
+		ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+		ImGui::Begin("##savingWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize
+			| ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav
+		);
+		ImGui::PushFont(m_largeFont);
+		ImGui::Text("Saving...");
 		ImGui::PopFont();
 		ImGui::SameLine();
 		ImGui::Spinner("##spinner", 18.0f, 6.0f, ImVec4(0.92f, 0.18f, 0.29f, 1.00f));
@@ -776,6 +888,38 @@ void Renderer::render(f32 thisFrame) {
 			std::swap(tmp, m_skybox);
 			frameData.deletionQueue.push([this, tmp] { destroySkybox(tmp); });
 		}
+	}
+
+	if(m_savingScene && m_savingSceneFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+		m_savingScene = false;
+	}
+
+	if(m_loadingScene && m_loadingSceneFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+		m_loadingScene = false;
+
+		m_loadingModel = true;
+		m_modelFuture = std::async(std::launch::async, [this] {
+			Model model;
+			std::filesystem::path path(m_modelPath);
+
+			if(std::filesystem::exists(path)) {
+				model = createModel(path);
+			}
+
+			return model;
+		});
+
+		m_loadingSkybox = true;
+		m_skyboxFuture = std::async(std::launch::async, [this] {
+			Skybox skybox;
+			std::filesystem::path path(m_skyboxPath);
+
+			if(std::filesystem::exists(path)) {
+				skybox = createSkybox(path);
+			}
+
+			return skybox;
+		});
 	}
 
 	m_frameIndex = (m_frameIndex + 1) % m_framesInFlight;

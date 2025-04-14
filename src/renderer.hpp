@@ -168,13 +168,23 @@ class Renderer {
 		VkPipelineLayout m_skyboxPipelineLayout = {};
 		VkPipeline m_skyboxPipeline = {};
 		
-		VkCommandPool m_transferPool = {};
-		VkCommandBuffer m_transferCmd = {};
+		VkCommandPool m_transferPoolModelThread = {};
+		VkCommandBuffer m_transferCmdModelThread = {};
+		VkCommandPool m_transferPoolSkyboxThread = {};
+		VkCommandBuffer m_transferCmdSkyboxThread = {};
 
-		VkCommandPool m_computePool = {};
-		VkCommandBuffer m_computeCmd = {};
+		VkCommandPool m_computePoolModelThread = {};
+		VkCommandBuffer m_computeCmdModelThread = {};
+		VkCommandPool m_computePoolSkyboxThread = {};
+		VkCommandBuffer m_computeCmdSkyboxThread = {};
 
-		VkSemaphore m_transferToComputeSem = {};
+		VkSemaphore m_transferToComputeSemModelThread = {};
+		VkSemaphore m_transferToComputeSemSkyboxThread = {};
+
+		VkFence m_transferFenceModelThread = {};
+		VkFence m_computeFenceModelThread = {};
+		VkFence m_transferFenceSkyboxThread = {};
+		VkFence m_computeFenceSkyboxThread = {};
 
 		VkDescriptorSetLayout m_oneImageSetLayout = {};
 		VkPipelineLayout m_oneImagePipelineLayout = {};
@@ -217,7 +227,14 @@ class Renderer {
 		b8 m_loadingSkybox = false;
 		std::future<Skybox> m_skyboxFuture;
 
+		b8 m_savingScene = false;
+		std::future<void> m_savingSceneFuture;
+
+		b8 m_loadingScene = false;
+		std::future<void> m_loadingSceneFuture;
+
 		std::mutex m_asyncComputeLock;
+		std::mutex m_dmaTransferLock;
 
 		// timing
 		u32 m_framesThisSecond = 0;
@@ -235,7 +252,7 @@ class Renderer {
 		// ImGui
 		b8 m_vsync = true;
 		i32 m_camIdx = 0;
-		i32 m_colorIdx = 0;
+		i32 m_colorIdx = 1;
 		i32 m_AAIdx = 0;
 		f32 m_fov = 90.0f;
 		f32 m_sensitivity = 0.5f;
@@ -248,6 +265,8 @@ class Renderer {
 		f32 m_modelScale = 1.0f;
 		glm::vec3 m_lightAngle{ 0.0f, 0.0f, 1.0f };
 		glm::vec4 m_lightColor{ 1.0f, 1.0f, 1.0f, 1.0f };
+		std::string m_modelPath;
+		std::string m_skyboxPath;
 
 		ImFont* m_largeFont = nullptr;
 

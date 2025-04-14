@@ -178,24 +178,50 @@ Renderer::Renderer() {
 		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
 			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
 			.queueFamilyIndex = m_transferQueueFamily
-		}), nullptr, &m_transferPool);
+		}), nullptr, &m_transferPoolModelThread);
 		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
-			.commandPool = m_transferPool,
+			.commandPool = m_transferPoolModelThread,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1
-		}), &m_transferCmd);
+		}), &m_transferCmdModelThread);
+
+		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+			.queueFamilyIndex = m_transferQueueFamily
+			}), nullptr, &m_transferPoolSkyboxThread);
+		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+			.commandPool = m_transferPoolSkyboxThread,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+			}), &m_transferCmdSkyboxThread);
 
 		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
 			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
 			.queueFamilyIndex = m_computeQueueFamily
-		}), nullptr, &m_computePool);
+		}), nullptr, &m_computePoolModelThread);
 		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
-			.commandPool = m_computePool,
+			.commandPool = m_computePoolModelThread,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1
-		}), &m_computeCmd);
+		}), &m_computeCmdModelThread);
 
-		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_transferToComputeSem);
+		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+			.queueFamilyIndex = m_computeQueueFamily
+			}), nullptr, &m_computePoolSkyboxThread);
+		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+			.commandPool = m_computePoolSkyboxThread,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		}), &m_computeCmdSkyboxThread);
+
+		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_transferToComputeSemModelThread);
+		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_transferToComputeSemSkyboxThread);
+
+		vkCreateFence(m_device, ptr(VkFenceCreateInfo{}), nullptr, &m_transferFenceModelThread);
+		vkCreateFence(m_device, ptr(VkFenceCreateInfo{}), nullptr, &m_computeFenceModelThread);
+		vkCreateFence(m_device, ptr(VkFenceCreateInfo{}), nullptr, &m_transferFenceSkyboxThread);
+		vkCreateFence(m_device, ptr(VkFenceCreateInfo{}), nullptr, &m_computeFenceSkyboxThread);
 	}
 
 	// compute pipeline layouts
@@ -341,9 +367,9 @@ Renderer::Renderer() {
 	{
 		m_brdfIntegralTex = createImage(m_brdfIntegralLUTSize, m_brdfIntegralLUTSize, VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
-		vkBeginCommandBuffer(m_computeCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+		vkBeginCommandBuffer(m_computeCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 		
-		vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+		vkCmdPipelineBarrier2(m_computeCmdModelThread, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -354,9 +380,9 @@ Renderer::Renderer() {
 			})
 		}));
 
-		vkCmdBindPipeline(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_brdfIntegralPipeline);
+		vkCmdBindPipeline(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_brdfIntegralPipeline);
 
-		vkCmdPushDescriptorSet(m_computeCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
+		vkCmdPushDescriptorSet(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.pImageInfo = ptr(VkDescriptorImageInfo{
@@ -365,9 +391,9 @@ Renderer::Renderer() {
 			})
 		}));
 
-		vkCmdDispatch(m_computeCmd, (m_brdfIntegralLUTSize + 7) / 8, (m_brdfIntegralLUTSize + 7) / 8, 1);
+		vkCmdDispatch(m_computeCmdModelThread, (m_brdfIntegralLUTSize + 7) / 8, (m_brdfIntegralLUTSize + 7) / 8, 1);
 
-		vkCmdPipelineBarrier2(m_computeCmd, ptr(VkDependencyInfo{
+		vkCmdPipelineBarrier2(m_computeCmdModelThread, ptr(VkDependencyInfo{
 			.imageMemoryBarrierCount = 1,
 			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
 				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -379,15 +405,15 @@ Renderer::Renderer() {
 			})
 		}));
 
-		vkEndCommandBuffer(m_computeCmd);
+		vkEndCommandBuffer(m_computeCmdModelThread);
 
 		vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
 			.commandBufferInfoCount = 1,
-			.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmd })
+			.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmdModelThread })
 		}), nullptr);
 
 		vkQueueWaitIdle(m_computeQueue);
-		vkResetCommandPool(m_device, m_computePool, 0);
+		vkResetCommandPool(m_device, m_computePoolModelThread, 0);
 	}
 
 	// Allocate Shadow Map
@@ -418,17 +444,17 @@ Renderer::Renderer() {
 		m_poissonDiskBuffer = createBuffer(poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		memcpy(poissonDiskStagingBuffer.hostPtr, samples.data(), poissonDiskBufferSize);
 
-		vkBeginCommandBuffer(m_transferCmd, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
-		vkCmdCopyBuffer(m_transferCmd, poissonDiskStagingBuffer.buffer, m_poissonDiskBuffer.buffer, 1, ptr(VkBufferCopy{ .size = poissonDiskBufferSize }));
-		vkEndCommandBuffer(m_transferCmd);
+		vkBeginCommandBuffer(m_transferCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+		vkCmdCopyBuffer(m_transferCmdModelThread, poissonDiskStagingBuffer.buffer, m_poissonDiskBuffer.buffer, 1, ptr(VkBufferCopy{ .size = poissonDiskBufferSize }));
+		vkEndCommandBuffer(m_transferCmdModelThread);
 
 		vkQueueSubmit2(m_transferQueue, 1, ptr(VkSubmitInfo2{
 			.commandBufferInfoCount = 1,
-			.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmd })
+			.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmdModelThread })
 		}), nullptr);
 
 		vkQueueWaitIdle(m_transferQueue);
-		vkResetCommandPool(m_device, m_transferPool, 0);
+		vkResetCommandPool(m_device, m_transferPoolModelThread, 0);
 		
 		destroyBuffer(poissonDiskStagingBuffer);
 	}
@@ -627,9 +653,18 @@ Renderer::~Renderer() {
 		vkDestroyFence(m_device, m_perFrameData[i].fence, nullptr);
 	}
 
-	vkDestroyCommandPool(m_device, m_transferPool, nullptr);
-	vkDestroyCommandPool(m_device, m_computePool, nullptr);
-	vkDestroySemaphore(m_device, m_transferToComputeSem, nullptr);
+	vkDestroyFence(m_device, m_computeFenceModelThread, nullptr);
+	vkDestroyFence(m_device, m_transferFenceModelThread, nullptr);
+	vkDestroyFence(m_device, m_computeFenceSkyboxThread, nullptr);
+	vkDestroyFence(m_device, m_transferFenceSkyboxThread, nullptr);
+
+	vkDestroyCommandPool(m_device, m_transferPoolSkyboxThread, nullptr);
+	vkDestroyCommandPool(m_device, m_computePoolSkyboxThread, nullptr);
+	vkDestroySemaphore(m_device, m_transferToComputeSemSkyboxThread, nullptr);
+
+	vkDestroyCommandPool(m_device, m_transferPoolModelThread, nullptr);
+	vkDestroyCommandPool(m_device, m_computePoolModelThread, nullptr);
+	vkDestroySemaphore(m_device, m_transferToComputeSemModelThread, nullptr);
 
 	vkDestroyPipeline(m_device, m_postprocessingPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_brdfIntegralPipeline, nullptr);
