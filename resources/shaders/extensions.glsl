@@ -3,3 +3,4 @@
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_maximal_reconvergence : require
 #extension GL_KHR_memory_scope_semantics : require
+#extension GL_EXT_shader_image_load_formatted : require

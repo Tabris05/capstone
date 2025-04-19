@@ -1,57 +1,34 @@
 #version 460
 
 #include "extensions.glsl"
-
-#include "../../shared/oitnode.h"
-
 #include "utils.glsl"
 
 layout(rgba16f, binding = 0) uniform restrict readonly image2D framebuffer;
-layout(rgba8, binding = 1) uniform restrict readonly image2D uiBuffer;
+layout(rgba16f, binding = 1) uniform restrict readonly image2D bloomBuffer;
 layout(binding = 2) uniform restrict writeonly image2D swapchain;
 
-layout(buffer_reference, scalar) restrict buffer OITBuffer {
-    OITNode nodes[];
-};
-
 layout(push_constant, scalar) uniform constants {
-    OITBuffer oitBuffer;
     u32 tonemapper;
 } pcs;
 
 layout(local_size_x = 8, local_size_y = 8) in;
 void main() {
-    uvec2 frameBufferSize = uvec2(imageSize(framebuffer));
     vec3 color = imageLoad(framebuffer, ivec2(gl_GlobalInvocationID)).rgb;
-    u32 baseIndex = (gl_GlobalInvocationID.y * frameBufferSize.x + gl_GlobalInvocationID.x) * 4;
-
-    if(gl_GlobalInvocationID.x < frameBufferSize.x && gl_GlobalInvocationID.y < frameBufferSize.y && u64(pcs.oitBuffer) != 0) {
-        for(u32 i = 4; i > 0; i--) {
-            OITNode cur = pcs.oitBuffer.nodes[baseIndex + i - 1];
-            if(cur.packedDepthTransmittance != 0) {
-                color = mix(unpacke5bgr9(cur.packedColor).rgb, color, unpackTransmittance(cur.packedDepthTransmittance));
-            }
-            pcs.oitBuffer.nodes[baseIndex + i - 1] = OITNode(0, 0);
-        }
-    }
-
-    vec4 uiColor = imageLoad(uiBuffer, ivec2(gl_GlobalInvocationID));
-    vec3 srgb = vec3(0.0f);
 
     switch(pcs.tonemapper) {
         case 0:
-            srgb = linearToSrgb(aces(color));
+            color = linearToSrgb(aces(color));
             break;
         case 1:
-            srgb = agx(color);
+            color = agx(color);
             break;
         case 2:
-            srgb = linearToSrgb(khronos(color));
+            color = linearToSrgb(khronos(color));
             break;
         default:
-            srgb = linearToSrgb(reinhard(color));
+            color = linearToSrgb(reinhard(color));
             break;
     }
 
-    imageStore(swapchain, ivec2(gl_GlobalInvocationID), vec4(mix(srgb, uiColor.rgb, uiColor.a), 1.0f));
+    imageStore(swapchain, ivec2(gl_GlobalInvocationID), vec4(color, 1.0f));
 }

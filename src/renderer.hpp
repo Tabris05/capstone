@@ -32,6 +32,7 @@ class Renderer {
 
 	private:
 		static constexpr u8 m_framesInFlight = 2;
+		static constexpr u32 m_maxBloomMips = 6;
 		static constexpr u32 m_irradianceMapSize = 32;
 		static constexpr u32 m_brdfIntegralLUTSize = 1024;
 		static constexpr u32 m_shadowMapSize = 2048; // this is hardcoded in shadow.vert and pbr.glsl
@@ -112,11 +113,6 @@ class Renderer {
 			u32 frameBufferWidth;
 		};
 
-		struct PostProcessingPCs {
-			VkDeviceAddress oitBuffer;
-			u32 tonemapper;
-		};
-
 		struct {
 			VkCommandPool cmdPool;
 			VkCommandBuffer cmdBuffer;
@@ -188,6 +184,7 @@ class Renderer {
 
 		VkDescriptorSetLayout m_oneImageSetLayout = {};
 		VkPipelineLayout m_oneImagePipelineLayout = {};
+		VkPipelineLayout m_transparencyCompositePipelineLayout = {};
 
 		VkDescriptorSetLayout m_twoImageSetLayout = {};
 		VkPipelineLayout m_twoImagePipelineLayout = {};
@@ -205,11 +202,14 @@ class Renderer {
 		VkPipeline m_irradiancePipeline = {};
 		VkPipeline m_radiancePipeline = {};
 		VkPipeline m_brdfIntegralPipeline = {};
+		VkPipeline m_transparencyCompositePipeline = {};
 		VkPipeline m_postprocessingPipeline = {};
+		VkPipeline m_uiCompositePipeline = {};
 
 		Buffer m_poissonDiskBuffer;
 		Buffer m_oitBuffer;
 		Image m_colorTarget;
+		Image m_bloomTarget;
 		Image m_depthTarget;
 		Image m_uiTarget;
 		Model m_model;

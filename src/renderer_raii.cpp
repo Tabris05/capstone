@@ -157,13 +157,24 @@ Renderer::Renderer(const char* path) {
 	// VkSurface and VkSwapchain
 	{
 		glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, ptr(1u), &m_surfaceFormat);
 
 		u32 count = 0;
+		vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, &count, nullptr);
+		std::vector<VkSurfaceFormatKHR> formats(count);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, &count, formats.data());
+		m_surfaceFormat = formats.front();
+		for(auto format : formats) {
+			if(!vkuFormatIsSRGB(format.format)) {
+				m_surfaceFormat = format;
+				break;
+			}
+		}
+
+		count = 0;
 		vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface, &count, nullptr);
 		std::vector<VkPresentModeKHR> modes(count);
 		vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface, &count, modes.data());
-
+		
 		for(auto mode : modes) {
 			if(mode == VK_PRESENT_MODE_MAILBOX_KHR) {
 				m_nonVsyncPresentMode == VK_PRESENT_MODE_MAILBOX_KHR;
@@ -314,7 +325,7 @@ Renderer::Renderer(const char* path) {
 					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
 				}
 			})
-			}), nullptr, &m_threeImageSetLayout);
+		}), nullptr, &m_threeImageSetLayout);
 
 		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
@@ -323,9 +334,20 @@ Renderer::Renderer(const char* path) {
 			.pPushConstantRanges = ptr(VkPushConstantRange{
 				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 				.offset = 0,
-				.size = sizeof(PostProcessingPCs)
+				.size = sizeof(u32)
 			})
 		}), nullptr, &m_postprocessingPipelineLayout);
+
+		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+			.setLayoutCount = 1,
+			.pSetLayouts = &m_oneImageSetLayout,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = ptr(VkPushConstantRange{
+				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+				.offset = 0,
+				.size = sizeof(VkDeviceAddress)
+			})
+		}), nullptr, &m_transparencyCompositePipelineLayout);
 	}
 
 	// compute pipelines
@@ -337,7 +359,9 @@ Renderer::Renderer(const char* path) {
 		m_irradiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "resources/shaders/irradiance.comp.spv");
 		m_radiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "resources/shaders/radiance.comp.spv");
 		m_brdfIntegralPipeline = createComputePipeline(m_oneImagePipelineLayout, "resources/shaders/brdfintegral.comp.spv");
+		m_transparencyCompositePipeline = createComputePipeline(m_transparencyCompositePipelineLayout, "resources/shaders/transparencycomposite.comp.spv");
 		m_postprocessingPipeline = createComputePipeline(m_postprocessingPipelineLayout, "resources/shaders/postprocess.comp.spv");
+		m_uiCompositePipeline = createComputePipeline(m_twoImagePipelineLayout, "resources/shaders/uicomposite.comp.spv");
 	}
 
 	// global samplers
@@ -706,7 +730,9 @@ Renderer::~Renderer() {
 	vkDestroyCommandPool(m_device, m_computePoolModelThread, nullptr);
 	vkDestroySemaphore(m_device, m_transferToComputeSemModelThread, nullptr);
 
+	vkDestroyPipeline(m_device, m_uiCompositePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_postprocessingPipeline, nullptr);
+	vkDestroyPipeline(m_device, m_transparencyCompositePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_brdfIntegralPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_radiancePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_irradiancePipeline, nullptr);
@@ -715,6 +741,8 @@ Renderer::~Renderer() {
 	vkDestroyPipeline(m_device, m_mipPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_srgbMipPipeline, nullptr);
 
+	vkDestroyPipelineLayout(m_device, m_transparencyCompositePipelineLayout, nullptr);
+	
 	vkDestroyPipelineLayout(m_device, m_postprocessingPipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_threeImageSetLayout, nullptr);
 
@@ -747,6 +775,7 @@ Renderer::~Renderer() {
 	destroyImage(m_shadowMap);
 	destroyImage(m_brdfIntegralTex);
 	destroyImage(m_colorTarget);
+	destroyImage(m_bloomTarget);
 	destroyImage(m_depthTarget);
 	destroyImage(m_uiTarget);
 	destroyBuffer(m_oitBuffer);

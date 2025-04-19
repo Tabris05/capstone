@@ -1,0 +1,19 @@
+#version 460
+
+#include "extensions.glsl"
+
+#include "../../shared/oitnode.h"
+
+#include "utils.glsl"
+
+layout(binding = 0) uniform restrict image2D swapchain;
+layout(rgba8, binding = 1) uniform restrict readonly image2D uiBuffer;
+
+
+layout(local_size_x = 8, local_size_y = 8) in;
+void main() {
+    vec3 color = imageLoad(swapchain, ivec2(gl_GlobalInvocationID)).rgb;
+    vec4 uiColor = imageLoad(uiBuffer, ivec2(gl_GlobalInvocationID));
+
+    imageStore(swapchain, ivec2(gl_GlobalInvocationID), vec4(mix(color, uiColor.rgb, uiColor.a), 1.0f));
+}
