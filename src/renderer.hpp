@@ -246,7 +246,6 @@ class Renderer {
 		f32 m_lastSecond = 0.0;
 
 		// movement
-		b8 m_flycam = false;
 		b8 m_firstClick = true;
 		f32 m_speed = 1.44f;
 		f32 m_scroll = 0.0f;

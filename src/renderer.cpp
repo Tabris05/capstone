@@ -26,15 +26,7 @@ void Renderer::run() {
 }
 
 void Renderer::handleInput(f32 deltaTime) {
-
-	if(glfwGetKey(m_window, GLFW_KEY_F) == GLFW_PRESS) {
-		m_flycam = true;
-	}
-	if(glfwGetKey(m_window, GLFW_KEY_G) == GLFW_PRESS) {
-		m_flycam = false;
-	}
-
-	if(m_flycam) {
+	if(m_camIdx == 1) {
 		if(glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS) {
 			m_position += m_speed * m_rotation * glm::vec3(deltaTime);
 		}
@@ -139,8 +131,7 @@ void Renderer::render(f32 thisFrame) {
 		ImGui::Begin("Camera");
 		ImGui::Text("Controls");
 		if(ImGui::Combo("Input Method", &m_camIdx, ptr({ "Orbital", "Flycam" }), 2)) {
-			m_flycam = m_camIdx == 1;
-			if(!m_flycam) {
+			if(m_camIdx == 0) {
 				m_rotation = glm::normalize(-m_position);
 			}
 		}
@@ -396,7 +387,7 @@ void Renderer::render(f32 thisFrame) {
 		* glm::rotate(glm::mat4(1.0f), m_modelYaw * 2.0f * std::numbers::pi_v<f32>, glm::vec3(0.0f, 1.0f, 0.0f))
 		* glm::rotate(glm::mat4(1.0f), m_modelRoll * 2.0f * std::numbers::pi_v<f32>, glm::vec3(0.0f, 0.0f, 1.0f))
 		* m_model.baseTransform;
-	glm::mat4 view = glm::lookAt(m_position, m_flycam ? m_position + m_rotation : glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 view = glm::lookAt(m_position, m_camIdx == 1 ? m_position + m_rotation : glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
 	glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f), m_lightAngle, glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 lightProjection = ortho(orthoSize, -orthoSize, -orthoSize, orthoSize, -orthoSize, orthoSize);
