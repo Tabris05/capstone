@@ -151,6 +151,7 @@ class Renderer {
 		VkSwapchainKHR m_swapchain = {};
 		std::vector<VkImage> m_swapchainImages;
 		std::vector<VkImageView> m_swapchainImageViews;
+		std::vector<std::pair<VkImageView, glm::uvec2>> m_bloomMips;
 
 		VkDescriptorSetLayout m_modelSetLayout = {};
 		VkDescriptorSetLayout m_modelPushDescriptorLayout = {};
@@ -191,6 +192,7 @@ class Renderer {
 
 		VkDescriptorSetLayout m_oneTexOneImageSetLayout = {};
 		VkPipelineLayout m_oneTexOneImagePipelineLayout = {};
+		VkPipelineLayout m_bloomPipelineLayout = {};
 		
 		VkDescriptorSetLayout m_threeImageSetLayout = {};
 		VkPipelineLayout m_postprocessingPipelineLayout = {};
@@ -205,6 +207,8 @@ class Renderer {
 		VkPipeline m_transparencyCompositePipeline = {};
 		VkPipeline m_postprocessingPipeline = {};
 		VkPipeline m_uiCompositePipeline = {};
+		VkPipeline m_bloomDownsamplePipeline = {};
+		VkPipeline m_bloomUpsamplePipeline = {};
 
 		Buffer m_poissonDiskBuffer;
 		Buffer m_oitBuffer;

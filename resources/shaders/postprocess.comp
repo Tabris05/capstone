@@ -14,6 +14,7 @@ layout(push_constant, scalar) uniform constants {
 layout(local_size_x = 8, local_size_y = 8) in;
 void main() {
     vec3 color = imageLoad(framebuffer, ivec2(gl_GlobalInvocationID)).rgb;
+    color = mix(color, imageLoad(bloomBuffer, ivec2(gl_GlobalInvocationID)).rgb, 0.04f);
 
     switch(pcs.tonemapper) {
         case 0:

@@ -15,4 +15,6 @@ glslc brdfintegral.comp -o brdfintegral.comp.spv --target-env=vulkan1.4
 glslc transparencycomposite.comp -o transparencycomposite.comp.spv --target-env=vulkan1.4
 glslc postprocess.comp -o postprocess.comp.spv --target-env=vulkan1.4
 glslc uicomposite.comp -o uicomposite.comp.spv --target-env=vulkan1.4
+glslc bloomdownsample.comp -o bloomdownsample.comp.spv --target-env=vulkan1.4
+glslc bloomupsample.comp -o bloomupsample.comp.spv --target-env=vulkan1.4
 pause

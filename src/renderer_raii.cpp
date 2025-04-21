@@ -100,7 +100,9 @@ Renderer::Renderer(const char* path) {
 					.drawIndirectFirstInstance = true,
 					.samplerAnisotropy = true,
 					.fragmentStoresAndAtomics = true,
-					.shaderInt64 = true,
+					.shaderStorageImageReadWithoutFormat = true,
+					.shaderStorageImageWriteWithoutFormat = true,
+					.shaderInt64 = true
 				}
 			}),
 			.queueCreateInfoCount = 3,
@@ -302,6 +304,17 @@ Renderer::Renderer(const char* path) {
 			.pSetLayouts = &m_oneTexOneImageSetLayout
 		}), nullptr, &m_oneTexOneImagePipelineLayout);
 
+		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+			.setLayoutCount = 1,
+			.pSetLayouts = &m_oneTexOneImageSetLayout,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = ptr(VkPushConstantRange{
+				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+				.offset = 0,
+				.size = sizeof(u32)
+			})
+		}), nullptr, &m_bloomPipelineLayout);
+
 		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
 			.bindingCount = 3,
@@ -362,6 +375,8 @@ Renderer::Renderer(const char* path) {
 		m_transparencyCompositePipeline = createComputePipeline(m_transparencyCompositePipelineLayout, "resources/shaders/transparencycomposite.comp.spv");
 		m_postprocessingPipeline = createComputePipeline(m_postprocessingPipelineLayout, "resources/shaders/postprocess.comp.spv");
 		m_uiCompositePipeline = createComputePipeline(m_twoImagePipelineLayout, "resources/shaders/uicomposite.comp.spv");
+		m_bloomDownsamplePipeline = createComputePipeline(m_bloomPipelineLayout, "resources/shaders/bloomdownsample.comp.spv");
+		m_bloomUpsamplePipeline = createComputePipeline(m_bloomPipelineLayout, "resources/shaders/bloomupsample.comp.spv");
 	}
 
 	// global samplers
@@ -730,6 +745,8 @@ Renderer::~Renderer() {
 	vkDestroyCommandPool(m_device, m_computePoolModelThread, nullptr);
 	vkDestroySemaphore(m_device, m_transferToComputeSemModelThread, nullptr);
 
+	vkDestroyPipeline(m_device, m_bloomUpsamplePipeline, nullptr);
+	vkDestroyPipeline(m_device, m_bloomDownsamplePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_uiCompositePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_postprocessingPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_transparencyCompositePipeline, nullptr);
@@ -740,8 +757,7 @@ Renderer::~Renderer() {
 	vkDestroyPipeline(m_device, m_cubePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_mipPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_srgbMipPipeline, nullptr);
-
-	vkDestroyPipelineLayout(m_device, m_transparencyCompositePipelineLayout, nullptr);
+	vkDestroyPipeline(m_device, m_skyboxPipeline, nullptr);
 	
 	vkDestroyPipelineLayout(m_device, m_postprocessingPipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_threeImageSetLayout, nullptr);
@@ -749,13 +765,15 @@ Renderer::~Renderer() {
 	vkDestroyPipelineLayout(m_device, m_oneTexOneImagePipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_oneTexOneImageSetLayout, nullptr);
 
+	vkDestroyPipelineLayout(m_device, m_bloomPipelineLayout, nullptr);
 	vkDestroyPipelineLayout(m_device, m_twoImagePipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_twoImageSetLayout, nullptr);
 
+	vkDestroyPipelineLayout(m_device, m_transparencyCompositePipelineLayout, nullptr);
 	vkDestroyPipelineLayout(m_device, m_oneImagePipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_oneImageSetLayout, nullptr);
 
-	vkDestroyPipeline(m_device, m_skyboxPipeline, nullptr);
+
 	vkDestroyPipelineLayout(m_device, m_skyboxPipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_skyboxSetLayout, nullptr);
 
@@ -771,6 +789,10 @@ Renderer::~Renderer() {
 	vkDestroySampler(m_device, m_skyboxSampler, nullptr);
 	destroySkybox(m_skybox);
 	destroyModel(m_model);
+
+	for(auto [view, _] : m_bloomMips) {
+		vkDestroyImageView(m_device, view, nullptr);
+	}
 
 	destroyImage(m_shadowMap);
 	destroyImage(m_brdfIntegralTex);

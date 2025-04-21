@@ -41,11 +41,24 @@ void Renderer::createSwapchain() {
 		m_swapchainImageViews.push_back(cur);
 	}
 
+	u32 numBloomMips = std::min(static_cast<u32>(std::floor(std::log2(std::max(m_width, m_height))) + 1), m_maxBloomMips);
 	m_oitBuffer = createBuffer(m_width * m_height * 4 * sizeof(OITNode), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	m_colorTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	m_bloomTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, std::min(static_cast<u32>(std::floor(std::log2(std::max(m_width, m_height))) + 1), m_maxBloomMips));
+	m_colorTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+	m_bloomTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, numBloomMips);
 	m_depthTarget = createImage(m_width, m_height, m_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 	m_uiTarget = createImage(m_width, m_height, m_uiFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+
+	for(u8 i = 0; i < numBloomMips; i++) {
+		VkImageView cur;
+		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+			.image = m_bloomTarget.image,
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = m_colorFormat,
+			.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, VK_REMAINING_ARRAY_LAYERS }
+		}), nullptr, &cur);
+
+		m_bloomMips.push_back(std::make_pair(cur, glm::uvec2(std::max(m_width >> i, 1), std::max(m_height >> i, 1))));
+	}
 }
 
 void Renderer::recreateSwapchain() {
@@ -57,6 +70,10 @@ void Renderer::recreateSwapchain() {
 
 	vkDeviceWaitIdle(m_device);
 
+	for(auto [view, _] : m_bloomMips) {
+		vkDestroyImageView(m_device, view, nullptr);
+	}
+	m_bloomMips.clear();
 	destroyBuffer(m_oitBuffer);
 	destroyImage(m_colorTarget);
 	destroyImage(m_bloomTarget);
@@ -65,7 +82,7 @@ void Renderer::recreateSwapchain() {
 	for(VkImageView view : m_swapchainImageViews) {
 		vkDestroyImageView(m_device, view, nullptr);
 	}
-	m_swapchainImageViews.resize(0);
+	m_swapchainImageViews.clear();
 
 	createSwapchain();
 	m_swapchainDirty = false;
