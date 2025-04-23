@@ -3,9 +3,8 @@
 #include "extensions.glsl"
 #include "utils.glsl"
 
-layout(rgba16f, binding = 0) uniform restrict readonly image2D framebuffer;
+layout(rgba16f, binding = 0) uniform restrict image2D framebuffer;
 layout(rgba16f, binding = 1) uniform restrict readonly image2D bloomBuffer;
-layout(binding = 2) uniform restrict writeonly image2D swapchain;
 
 layout(push_constant, scalar) uniform constants {
     u32 tonemapper;
@@ -31,5 +30,5 @@ void main() {
             break;
     }
 
-    imageStore(swapchain, ivec2(gl_GlobalInvocationID), vec4(color, 1.0f));
+    imageStore(framebuffer, ivec2(gl_GlobalInvocationID), vec4(color, 1.0f));
 }

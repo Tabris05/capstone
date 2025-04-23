@@ -209,6 +209,8 @@ class Renderer {
 		VkPipeline m_uiCompositePipeline = {};
 		VkPipeline m_bloomDownsamplePipeline = {};
 		VkPipeline m_bloomUpsamplePipeline = {};
+		VkPipeline m_fxaaPipeline = {};
+		VkPipeline m_blitPipeline = {};
 
 		Buffer m_poissonDiskBuffer;
 		Buffer m_oitBuffer;
@@ -256,7 +258,7 @@ class Renderer {
 		b8 m_vsync = true;
 		i32 m_camIdx = 0;
 		i32 m_colorIdx = 1;
-		i32 m_AAIdx = 0;
+		i32 m_AAIdx = 1;
 		f32 m_fov = 90.0f;
 		f32 m_sensitivity = 0.5f;
 		f32 m_scrollSensitivity = 0.5f;

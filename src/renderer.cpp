@@ -177,7 +177,7 @@ void Renderer::render(f32 thisFrame) {
 	// options menu
 	{
 		ImGui::Begin("Options");
-		ImGui::Combo("Antialiasing", &m_AAIdx, ptr({ "None" }), 1);
+		ImGui::Combo("Antialiasing", &m_AAIdx, ptr({ "None", "FXAA" }), 2);
 
 		b8 vsyncBefore = m_vsync;
 		ImGui::Checkbox("Enable Vsync", &m_vsync);
@@ -720,24 +720,14 @@ void Renderer::render(f32 thisFrame) {
 	// ui pass
 	{
 		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-			.imageMemoryBarrierCount = 2,
-			.pImageMemoryBarriers = ptr({
-				VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-					.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-					.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-					.image = m_uiTarget.image,
-					.subresourceRange = colorSubresourceRange()
-				},
-				VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-					.image = m_swapchainImages[imageIndex],
-					.subresourceRange = colorSubresourceRange()
-				}
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+				.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+				.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				.image = m_uiTarget.image,
+				.subresourceRange = colorSubresourceRange()
 			})
 		}));
 
@@ -968,7 +958,6 @@ void Renderer::render(f32 thisFrame) {
 					})
 				},
 			}));
-			vkCmdPushConstants(frameData.cmdBuffer, m_bloomPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(u32), &i);
 			vkCmdDispatch(frameData.cmdBuffer, (m_bloomMips[i - 1].second.x + 7) / 8, (m_bloomMips[i - 1].second.y + 7) / 8, 1);
 
 			vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
@@ -1002,24 +991,10 @@ void Renderer::render(f32 thisFrame) {
 
 	// post-processing pass
 	{
-		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
-			.imageMemoryBarrierCount = 1,
-			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-				.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.image = m_uiTarget.image,
-				.subresourceRange = colorSubresourceRange()
-			})
-		}));
-
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipeline);
 		vkCmdPushConstants(frameData.cmdBuffer, m_postprocessingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(u32), &m_colorIdx);
 		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
-			.descriptorCount = 3,
+			.descriptorCount = 2,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.pImageInfo = ptr({
 				VkDescriptorImageInfo{
@@ -1029,14 +1004,62 @@ void Renderer::render(f32 thisFrame) {
 				VkDescriptorImageInfo{
 					.imageView = m_bloomMips.front().first,
 					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-				},
-				VkDescriptorImageInfo{
-					.imageView = m_swapchainImageViews[imageIndex],
-					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 				}
 			})
 		}));
 
+		vkCmdDispatch(frameData.cmdBuffer, (m_width + 7) / 8, (m_height + 7) / 8, 1);
+
+		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				.image = m_colorTarget.image,
+				.subresourceRange = colorSubresourceRange()
+			})
+		}));
+	}
+
+	// fxaa pass
+	{
+		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.image = m_swapchainImages[imageIndex],
+				.subresourceRange = colorSubresourceRange()
+			})
+		}));
+
+		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_AAIdx == 1 ? m_fxaaPipeline : m_blitPipeline);
+		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneTexOneImagePipelineLayout, 0, 2, ptr({
+			VkWriteDescriptorSet{
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.pImageInfo = ptr(VkDescriptorImageInfo{
+					.sampler = m_skyboxSampler,
+					.imageView = m_colorTarget.view,
+					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				}),
+			},
+			VkWriteDescriptorSet{
+				.dstBinding = 1,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+				.pImageInfo = ptr(VkDescriptorImageInfo{
+					.imageView = m_swapchainImageViews[imageIndex],
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+				})
+			},
+		}));
 		vkCmdDispatch(frameData.cmdBuffer, (m_width + 7) / 8, (m_height + 7) / 8, 1);
 
 		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
@@ -1056,7 +1079,20 @@ void Renderer::render(f32 thisFrame) {
 
 	// composite ui pass
 	{
-		
+		vkCmdPipelineBarrier2(frameData.cmdBuffer, ptr(VkDependencyInfo{
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+				.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+				.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+				.image = m_uiTarget.image,
+				.subresourceRange = colorSubresourceRange()
+			})
+		}));
+
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_uiCompositePipeline);
 		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_twoImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
 			.descriptorCount = 2,

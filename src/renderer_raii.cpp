@@ -342,7 +342,7 @@ Renderer::Renderer(const char* path) {
 
 		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
-			.pSetLayouts = &m_threeImageSetLayout,
+			.pSetLayouts = &m_twoImageSetLayout,
 			.pushConstantRangeCount = 1,
 			.pPushConstantRanges = ptr(VkPushConstantRange{
 				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -377,6 +377,8 @@ Renderer::Renderer(const char* path) {
 		m_uiCompositePipeline = createComputePipeline(m_twoImagePipelineLayout, "resources/shaders/uicomposite.comp.spv");
 		m_bloomDownsamplePipeline = createComputePipeline(m_bloomPipelineLayout, "resources/shaders/bloomdownsample.comp.spv");
 		m_bloomUpsamplePipeline = createComputePipeline(m_bloomPipelineLayout, "resources/shaders/bloomupsample.comp.spv");
+		m_fxaaPipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "resources/shaders/fxaa.comp.spv");
+		m_blitPipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, "resources/shaders/blit.comp.spv");
 	}
 
 	// global samplers
@@ -745,6 +747,8 @@ Renderer::~Renderer() {
 	vkDestroyCommandPool(m_device, m_computePoolModelThread, nullptr);
 	vkDestroySemaphore(m_device, m_transferToComputeSemModelThread, nullptr);
 
+	vkDestroyPipeline(m_device, m_blitPipeline, nullptr);
+	vkDestroyPipeline(m_device, m_fxaaPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_bloomUpsamplePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_bloomDownsamplePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_uiCompositePipeline, nullptr);

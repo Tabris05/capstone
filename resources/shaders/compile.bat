@@ -17,4 +17,6 @@ glslc postprocess.comp -o postprocess.comp.spv --target-env=vulkan1.4
 glslc uicomposite.comp -o uicomposite.comp.spv --target-env=vulkan1.4
 glslc bloomdownsample.comp -o bloomdownsample.comp.spv --target-env=vulkan1.4
 glslc bloomupsample.comp -o bloomupsample.comp.spv --target-env=vulkan1.4
+glslc fxaa.comp -o fxaa.comp.spv --target-env=vulkan1.4
+glslc blit.comp -o blit.comp.spv --target-env=vulkan1.4
 pause
