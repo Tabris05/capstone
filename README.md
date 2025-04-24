@@ -12,7 +12,7 @@ The 3D model viewer I wrote in Vulkan for my Computer Science Capstone.
 - Full Scene Serialization to Custom File Format
 - Efficient Bindless and GPU Driven Architecture
 ### Supported Formats
-3D model files must be of the `.glTF` or `.glb` format and skyboxes must be equirectangular projections of the `.hdr` format. Full scenes must be of the custom `.mvs` format.
+3D model files must be of the `.glTF` or `.glb` format and skyboxes must be equirectangular projections of the `.hdr` format. Full scenes must be of the custom `.mvs` format. `.mvs` files support Windows' `Open With` functionality.
 ### Controls
 - **Orbital Mode:**
   - Hold `Left Click` when not hovering over a GUI element to pan the camera and use `Scroll Wheel` to change distance to the model.
