@@ -318,6 +318,7 @@ void Renderer::render(f32 thisFrame) {
 					file.read(reinterpret_cast<char*>(&var), sizeof(var));
 				};
 
+				b8 vsync = m_vsync;
 				readVariable(m_scroll);
 				readVariable(m_position);
 				readVariable(m_rotation);
@@ -336,6 +337,10 @@ void Renderer::render(f32 thisFrame) {
 				readVariable(m_modelScale);
 				readVariable(m_lightAngle);
 				readVariable(m_lightColor);
+
+				if(vsync != m_vsync) {
+					m_swapchainDirty = true;
+				}
 
 				u64 size = 0;
 				readVariable(size);
