@@ -434,18 +434,6 @@ Renderer::Renderer(const char* path) {
 
 		vkCmdDispatch(m_computeCmdModelThread, (m_brdfIntegralLUTSize + 7) / 8, (m_brdfIntegralLUTSize + 7) / 8, 1);
 
-		vkCmdPipelineBarrier2(m_computeCmdModelThread, ptr(VkDependencyInfo{
-			.imageMemoryBarrierCount = 1,
-			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.image = m_brdfIntegralTex.image,
-				.subresourceRange = colorSubresourceRange()
-			})
-		}));
-
 		vkEndCommandBuffer(m_computeCmdModelThread);
 
 		vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{

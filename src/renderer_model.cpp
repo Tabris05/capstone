@@ -106,37 +106,16 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		Image image = createImage(width, height, isSrgb[idx] ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, numMips);
 		images.push_back(image);
 
-		vkCmdPipelineBarrier2(m_transferCmdModelThread, ptr(VkDependencyInfo{
-			.imageMemoryBarrierCount = 1,
-			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-				.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-				.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				.image = image.image,
-				.subresourceRange = colorSubresourceRange()
-			})
-		}));
+		vkCmdInitializeColorImage(m_transferCmdModelThread, image.image);
 
 		vkCmdCopyBufferToImage2(m_transferCmdModelThread, ptr(VkCopyBufferToImageInfo2{
 			.srcBuffer = stagingBuffer.buffer,
 			.dstImage = image.image,
-			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			.dstImageLayout = VK_IMAGE_LAYOUT_GENERAL,
 			.regionCount = 1,
 			.pRegions = ptr(VkBufferImageCopy2{
 				.imageSubresource = VkImageSubresourceLayers{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
 				.imageExtent = { static_cast<u32>(width), static_cast<u32>(height), 1 }
-			})
-		}));
-
-		vkCmdPipelineBarrier2(m_transferCmdModelThread, ptr(VkDependencyInfo{
-			.imageMemoryBarrierCount = 1,
-			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-				.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.image = image.image,
-				.subresourceRange = colorSubresourceRange()
 			})
 		}));
 
@@ -177,30 +156,8 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 			vkCmdDispatch(m_computeCmdModelThread, (std::max(width >> i, 1) + 7) / 8, (std::max(height >> i, 1) + 7) / 8, 1);
 
-			vkCmdPipelineBarrier2(m_computeCmdModelThread, ptr(VkDependencyInfo{
-				.imageMemoryBarrierCount = 1,
-				.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-					.image = image.image,
-					.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 }
-				})
-			}));
+			vkCmdBarrier(m_computeCmdModelThread, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 		}
-
-		vkCmdPipelineBarrier2(m_computeCmdModelThread, ptr(VkDependencyInfo{
-			.imageMemoryBarrierCount = 1,
-			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.image = image.image,
-				.subresourceRange = colorSubresourceRange()
-			})
-		}));
 	}
 
 	vkEndCommandBuffer(m_computeCmdModelThread);
@@ -224,7 +181,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		VkDescriptorImageInfo info = {
 			.sampler = samplers[tex.samplerIndex.value()],
 			.imageView = images[tex.imageIndex.value()].view,
-			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 		};
 
 		descriptors.push_back(info);
@@ -234,7 +191,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		VkDescriptorImageInfo info = {
 				.sampler = m_skyboxSampler,
 				.imageView = nullptr,
-				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 		};
 
 		descriptors.push_back(info);

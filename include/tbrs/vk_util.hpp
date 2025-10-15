@@ -94,4 +94,171 @@ inline bool vkuFormatIsSRGB(VkFormat format) {
     }
 }
 
+enum class PipelineStage {
+    None = 0,
+
+    PreRasterRead = 1 << 0,
+    FragmentRead = 1 << 1,
+    ComputeRead = 1 << 2,
+
+    PreRasterWrite = 1 << 3,
+    FragmentWrite = 1 << 4,
+    ComputeWrite = 1 << 5,
+
+    CopyRead = 1 << 6,
+    CopyWrite = 1 << 7,
+
+    DSReadOnly = 1 << 8,
+    DSTarget = 1 << 9,
+    ColorTarget = 1 << 10,
+
+    PreRaster = PreRasterRead | PreRasterWrite,
+    Fragment = FragmentRead | FragmentWrite,
+    Compute = ComputeRead | ComputeWrite,
+
+    Copy = CopyRead | CopyWrite,
+    
+    Read = PreRasterRead | FragmentRead | ComputeRead | CopyRead | DSReadOnly,
+    Write = PreRasterWrite | FragmentWrite | ComputeWrite | CopyWrite | DSTarget | ColorTarget,
+    All = Read | Write
+};
+
+inline PipelineStage operator&(PipelineStage lhs, PipelineStage rhs) {
+    return static_cast<PipelineStage>(static_cast<u32>(lhs) & static_cast<u32>(rhs));
+}
+
+inline PipelineStage operator|(PipelineStage lhs, PipelineStage rhs) {
+    return static_cast<PipelineStage>(static_cast<u32>(lhs) | static_cast<u32>(rhs));
+}
+
+static void pipeStageToBarrierBits(PipelineStage usages, VkPipelineStageFlagBits2& outStages, VkAccessFlagBits2& outAccess) {
+    if((usages & PipelineStage::PreRasterRead) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT
+                   | VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT;
+        outAccess |= VK_ACCESS_2_SHADER_READ_BIT;
+    }
+
+    if((usages & PipelineStage::PreRasterWrite) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT;
+        outAccess |= VK_ACCESS_2_SHADER_WRITE_BIT;
+    }
+
+    if((usages & PipelineStage::FragmentRead) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+        outAccess |= VK_ACCESS_2_SHADER_READ_BIT;
+    }
+
+    if((usages & PipelineStage::FragmentWrite) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+        outAccess |= VK_ACCESS_2_SHADER_WRITE_BIT;
+    }
+
+    if((usages & PipelineStage::ComputeRead) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        outAccess |= VK_ACCESS_2_SHADER_READ_BIT;
+    }
+
+    if((usages & PipelineStage::ComputeWrite) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        outAccess |= VK_ACCESS_2_SHADER_WRITE_BIT;
+    }
+
+    if((usages & PipelineStage::CopyRead) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+        outAccess |= VK_ACCESS_2_TRANSFER_READ_BIT;
+    }
+
+    if((usages & PipelineStage::CopyWrite) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+        outAccess |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    }
+
+    if((usages & PipelineStage::DSReadOnly) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+        outAccess |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    }
+
+    if((usages & PipelineStage::DSTarget) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+        outAccess |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
+
+    if((usages & PipelineStage::ColorTarget) != PipelineStage::None) {
+        outStages |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        outAccess |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+}
+
+struct Barrier {
+    PipelineStage src;
+    PipelineStage dst;
+};
+
+inline void vkCmdBarrier(VkCommandBuffer cmd, PipelineStage src, PipelineStage dst) {
+
+    VkMemoryBarrier2 barrier{};
+    pipeStageToBarrierBits(src, barrier.srcStageMask, barrier.srcAccessMask);
+    pipeStageToBarrierBits(dst, barrier.dstStageMask, barrier.dstAccessMask);
+
+    vkCmdPipelineBarrier2(cmd, ptr(VkDependencyInfo{
+        .memoryBarrierCount = 1,
+        .pMemoryBarriers = &barrier
+    }));
+}
+
+inline void vkCmdBarrier(VkCommandBuffer cmd, std::initializer_list<Barrier> barriers) {
+
+    VkMemoryBarrier2 barrier{};
+    for(auto [src, dst] : barriers) {
+        pipeStageToBarrierBits(src, barrier.srcStageMask, barrier.srcAccessMask);
+        pipeStageToBarrierBits(dst, barrier.dstStageMask, barrier.dstAccessMask);
+    }
+
+    vkCmdPipelineBarrier2(cmd, ptr(VkDependencyInfo{
+        .memoryBarrierCount = 1,
+        .pMemoryBarriers = &barrier
+    }));
+}
+
+inline void vkCmdInitializeColorImage(VkCommandBuffer cmd, VkImage image) {
+    vkCmdPipelineBarrier2(cmd, ptr(VkDependencyInfo{
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+            .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .image = image,
+            .subresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS }
+        })
+    }));
+}
+
+inline void vkCmdInitializeDepthImage(VkCommandBuffer cmd, VkImage image) {
+    vkCmdPipelineBarrier2(cmd, ptr(VkDependencyInfo{
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+            .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .image = image,
+            .subresourceRange{ VK_IMAGE_ASPECT_DEPTH_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS }
+        })
+    }));
+}
+
+inline void vkCmdPreparePresent(VkCommandBuffer cmd, VkImage image) {
+    vkCmdPipelineBarrier2(cmd, ptr(VkDependencyInfo{
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
+            .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            .image = image,
+            .subresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS }
+        })
+    }));
+}
+
 #endif

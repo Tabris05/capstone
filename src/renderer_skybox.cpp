@@ -15,30 +15,10 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 	Image srcImg = createImage(width, height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	vkBeginCommandBuffer(m_transferCmdSkyboxThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
-	vkCmdPipelineBarrier2(m_transferCmdSkyboxThread, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-			.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-			.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			.image = srcImg.image,
-			.subresourceRange = colorSubresourceRange()
-		})
-	}));
-	vkCmdCopyBufferToImage(m_transferCmdSkyboxThread, stagingBuffer.buffer, srcImg.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, ptr(VkBufferImageCopy{
+	vkCmdInitializeColorImage(m_transferCmdSkyboxThread, srcImg.image);
+	vkCmdCopyBufferToImage(m_transferCmdSkyboxThread, stagingBuffer.buffer, srcImg.image, VK_IMAGE_LAYOUT_GENERAL, 1, ptr(VkBufferImageCopy{
 		.imageSubresource = colorSubresourceLayers(),
 		.imageExtent = { static_cast<u32>(width), static_cast<u32>(height), 1 }
-	}));
-	vkCmdPipelineBarrier2(m_transferCmdSkyboxThread, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-			.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-			.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			.image = srcImg.image,
-			.subresourceRange = colorSubresourceRange()
-		})
 	}));
 	vkEndCommandBuffer(m_transferCmdSkyboxThread);
 
@@ -85,16 +65,8 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 	}), nullptr, &radianceMapView);
 
 	vkBeginCommandBuffer(m_computeCmdSkyboxThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
-	vkCmdPipelineBarrier2(m_computeCmdSkyboxThread, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-			.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-			.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-			.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-			.image = environmentMap.image,
-			.subresourceRange = colorSubresourceRange()
-		})
-	}));
+
+	vkCmdInitializeColorImage(m_computeCmdSkyboxThread, environmentMap.image);
 
 	vkCmdBindPipeline(m_computeCmdSkyboxThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_cubePipeline);
 	vkCmdPushDescriptorSet(m_computeCmdSkyboxThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneTexOneImagePipelineLayout, 0, 2, ptr({
@@ -104,7 +76,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 			.pImageInfo = ptr(VkDescriptorImageInfo{
 				.sampler = m_skyboxSampler,
 				.imageView = srcImg.view,
-				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 			})
 		},
 		VkWriteDescriptorSet{
@@ -131,17 +103,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 
 	vkCmdBindPipeline(m_computeCmdSkyboxThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_cubeMipPipeline);
 	for(u8 i = 1; i < cubeMips; i++) {
-		vkCmdPipelineBarrier2(m_computeCmdSkyboxThread, ptr(VkDependencyInfo{
-			.imageMemoryBarrierCount = 1,
-			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-				.image = environmentMap.image,
-				.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, static_cast<u32>(i - 1), 1, 0, VK_REMAINING_ARRAY_LAYERS }
-			})
-		}));
+		vkCmdBarrier(m_computeCmdSkyboxThread, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 
 		VkImageView curMipView;
 		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
@@ -171,28 +133,8 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 		vkCmdDispatch(m_computeCmdSkyboxThread, (std::max(cubeSize >> i, 1) + 7) / 8, (std::max(cubeSize >> i, 1) + 7) / 8, 6);
 	}
 
-	vkCmdPipelineBarrier2(m_computeCmdSkyboxThread, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 2,
-		.pImageMemoryBarriers = ptr({
-			VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
-				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.image = environmentMap.image,
-				.subresourceRange = colorSubresourceRange()
-			},
-			VkImageMemoryBarrier2{
-				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.image = irradianceMap.image,
-				.subresourceRange = colorSubresourceRange()
-			}
-		})
-	}));
+	vkCmdInitializeColorImage(m_computeCmdSkyboxThread, irradianceMap.image);
+	vkCmdBarrier(m_computeCmdSkyboxThread, PipelineStage::Compute, PipelineStage::ComputeRead);
 
 	vkCmdBindPipeline(m_computeCmdSkyboxThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_irradiancePipeline);
 
@@ -203,7 +145,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 			.pImageInfo = ptr(VkDescriptorImageInfo{
 				.sampler = m_skyboxSampler,
 				.imageView = environmentMapView,
-				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 			})
 		},
 		VkWriteDescriptorSet{
@@ -219,26 +161,8 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 
 	vkCmdDispatch(m_computeCmdSkyboxThread, (m_irradianceMapSize + 7) / 8, (m_irradianceMapSize + 7) / 8, 6);
 
-	vkCmdPipelineBarrier2(m_computeCmdSkyboxThread, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 2,
-		.pImageMemoryBarriers = ptr({
-			VkImageMemoryBarrier2{
-				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.image = irradianceMap.image,
-				.subresourceRange = colorSubresourceRange()
-			},
-			VkImageMemoryBarrier2{
-				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.image = radianceMap.image,
-				.subresourceRange = colorSubresourceRange()
-			}
-		})
-	}));
+
+	vkCmdInitializeColorImage(m_computeCmdSkyboxThread, radianceMap.image);
 
 	vkCmdBindPipeline(m_computeCmdSkyboxThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_radiancePipeline);
 
@@ -248,7 +172,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 		.pImageInfo = ptr(VkDescriptorImageInfo{
 			.sampler = m_skyboxSampler,
 			.imageView = environmentMapView,
-			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 		})
 	}));
 
@@ -274,18 +198,6 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 
 		vkCmdDispatch(m_computeCmdSkyboxThread, (std::max(cubeSize >> i, 1) + 7) / 8, (std::max(cubeSize >> i, 1) + 7) / 8, 6);
 	}
-
-	vkCmdPipelineBarrier2(m_computeCmdSkyboxThread, ptr(VkDependencyInfo{
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-			.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-			.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-			.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			.image = radianceMap.image,
-			.subresourceRange = colorSubresourceRange()
-		})
-	}));
 
 	vkEndCommandBuffer(m_computeCmdSkyboxThread);
 
