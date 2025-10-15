@@ -1140,14 +1140,14 @@ void Renderer::render(f32 thisFrame) {
 		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = frameData.cmdBuffer }),
 		.signalSemaphoreInfoCount = 1,
 		.pSignalSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
-			.semaphore = frameData.presentSem,
+			.semaphore = m_swapchainSems[imageIndex],
 			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
 		}),
 	}), frameData.fence);
 
 	result = vkQueuePresentKHR(m_graphicsQueue, ptr(VkPresentInfoKHR{
 		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &frameData.presentSem,
+		.pWaitSemaphores = &m_swapchainSems[imageIndex],
 		.swapchainCount = 1,
 		.pSwapchains = &m_swapchain,
 		.pImageIndices = &imageIndex

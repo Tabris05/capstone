@@ -117,7 +117,6 @@ class Renderer {
 			VkCommandPool cmdPool;
 			VkCommandBuffer cmdBuffer;
 			VkSemaphore acquireSem;
-			VkSemaphore presentSem;
 			VkFence fence;
 			std::queue<std::function<void(void)>> deletionQueue;
 		} m_perFrameData[m_framesInFlight];
@@ -151,6 +150,7 @@ class Renderer {
 		VkSwapchainKHR m_swapchain = {};
 		std::vector<VkImage> m_swapchainImages;
 		std::vector<VkImageView> m_swapchainImageViews;
+		std::vector<VkSemaphore> m_swapchainSems;
 		std::vector<std::pair<VkImageView, glm::uvec2>> m_bloomMips;
 
 		VkDescriptorSetLayout m_modelSetLayout = {};

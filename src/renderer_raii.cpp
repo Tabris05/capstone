@@ -151,7 +151,6 @@ Renderer::Renderer(const char* path) {
 				.commandBufferCount = 1
 			}), &m_perFrameData[i].cmdBuffer);
 			vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_perFrameData[i].acquireSem);
-			vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_perFrameData[i].presentSem);
 			vkCreateFence(m_device, ptr(VkFenceCreateInfo{ .flags = VK_FENCE_CREATE_SIGNALED_BIT }), nullptr, &m_perFrameData[i].fence);
 		}
 	}
@@ -730,7 +729,6 @@ Renderer::~Renderer() {
 	for(u8 i = 0; i < m_framesInFlight; i++) {
 		vkDestroyCommandPool(m_device, m_perFrameData[i].cmdPool, nullptr);
 		vkDestroySemaphore(m_device, m_perFrameData[i].acquireSem, nullptr);
-		vkDestroySemaphore(m_device, m_perFrameData[i].presentSem, nullptr);
 		vkDestroyFence(m_device, m_perFrameData[i].fence, nullptr);
 	}
 
@@ -809,6 +807,10 @@ Renderer::~Renderer() {
 	
 	for(VkImageView view : m_swapchainImageViews) {
 		vkDestroyImageView(m_device, view, nullptr);
+	}
+
+	for(VkSemaphore sem : m_swapchainSems) {
+		vkDestroySemaphore(m_device, sem, nullptr);
 	}
 
 	vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);

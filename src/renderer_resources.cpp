@@ -31,14 +31,18 @@ void Renderer::createSwapchain() {
 	vkGetSwapchainImagesKHR(m_device, m_swapchain, &numSwapchainImages, m_swapchainImages.data());
 
 	for(VkImage img : m_swapchainImages) {
-		VkImageView cur;
+		VkImageView curView;
 		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
 			.image = img,
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
 			.format = m_surfaceFormat.format,
 			.subresourceRange = colorSubresourceRange()
-		}), nullptr, &cur);
-		m_swapchainImageViews.push_back(cur);
+		}), nullptr, &curView);
+		m_swapchainImageViews.push_back(curView);
+
+		VkSemaphore curSem;
+		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &curSem);
+		m_swapchainSems.push_back(curSem);
 	}
 
 	u32 numBloomMips = std::min(static_cast<u32>(std::floor(std::log2(std::max(m_width, m_height))) + 1), m_maxBloomMips);
@@ -83,6 +87,10 @@ void Renderer::recreateSwapchain() {
 		vkDestroyImageView(m_device, view, nullptr);
 	}
 	m_swapchainImageViews.clear();
+	for(VkSemaphore sem : m_swapchainSems) {
+		vkDestroySemaphore(m_device, sem, nullptr);
+	}
+	m_swapchainSems.clear();
 
 	createSwapchain();
 	m_swapchainDirty = false;
