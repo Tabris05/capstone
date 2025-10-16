@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{12a93a80-b288-4752-a1d0-919f0b7fd504}</ProjectGuid>
+    <RootNamespace>shaders</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <None Include="src\blend.frag" />
+    <None Include="src\blit.comp" />
+    <None Include="src\bloomdownsample.comp" />
+    <None Include="src\bloomupsample.comp" />
+    <None Include="src\brdfintegral.comp" />
+    <None Include="src\cube.comp" />
+    <None Include="src\cubemip.comp" />
+    <None Include="src\fxaa.comp" />
+    <None Include="src\irradiance.comp" />
+    <None Include="src\mip.comp" />
+    <None Include="src\model.vert" />
+    <None Include="src\opaque.frag" />
+    <None Include="src\postprocess.comp" />
+    <None Include="src\prepass.vert" />
+    <None Include="src\radiance.comp" />
+    <None Include="src\shadow.vert" />
+    <None Include="src\skybox.frag" />
+    <None Include="src\skybox.vert" />
+    <None Include="src\srgbmip.comp" />
+    <None Include="src\transparencycomposite.comp" />
+    <None Include="src\uicomposite.comp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+  <PropertyGroup>
+  	<GLSLC_PATH>$(ProjectDir)/bin/glslc.exe</GLSLC_PATH>
+	  <OutDir>$(ProjectDir)/output/shaders/</OutDir>
+    <GLSLC_Opts>-I &quot;$(SolutionDir)/shared&quot; -mfmt=c -o</GLSLC_Opts>
+  </PropertyGroup>
+
+<ItemGroup>
+  <ShaderFiles Include="@(None)">
+    <OutFilename>$(OutDir)%(Filename)_$([System.String]::Copy('%(Extension)').Substring(1))</OutFilename>
+  </ShaderFiles>
+</ItemGroup>
+
+  <Target Name="CompileShaders"
+    Inputs="@(ShaderFiles)"
+    Outputs="@(ShaderFiles -> '%(OutFilename)')"
+    BeforeTargets="ClCompile">
+
+    <MakeDir Directories="$(OutDir)" />
+    <Exec Command="&quot;$(GLSLC_PATH)&quot; &quot;%(ShaderFiles.Identity)&quot; $(GLSLC_Opts) &quot;%(ShaderFiles.OutFilename).tmp&quot;" />
+  </Target>
+
+  <Target Name="WriteShaderHeaders"
+        Inputs="@(ShaderFiles->'%(OutFilename).tmp')"
+        Outputs="@(ShaderFiles->'%(OutFilename).h')"
+        AfterTargets="CompileShaders">
+
+  <MakeDir Directories="$(OutDir)" />
+
+  <!-- Call the same project for each ShaderFiles item; each call gets its own item/property scope -->
+  <MSBuild
+    Projects="$(MSBuildProjectFile)"
+    Targets="WriteSingleHeader"
+    BuildInParallel="true"
+    Properties="TmpFile=%(ShaderFiles.OutFilename).tmp;
+                HeaderFile=%(ShaderFiles.OutFilename).h;
+                ArrayName=%(ShaderFiles.Filename)_$([System.String]::Copy('%(ShaderFiles.Extension)').Substring(1))" />
+  </Target>
+
+  <Target Name="WriteSingleHeader" Inputs="$(TmpFile)" Outputs="$(HeaderFile)">
+  
+    <ReadLinesFromFile File="$(TmpFile)">
+      <Output TaskParameter="Lines" ItemName="TmpLines" />
+    </ReadLinesFromFile>
+  
+    <WriteLinesToFile
+      File="$(HeaderFile)"
+      Lines="#include %3Cinitializer_list>;constexpr std::initializer_list%3Cunsigned int> $(ArrayName) = "
+      Overwrite="true"
+      Encoding="UTF-8" />
+  
+    <WriteLinesToFile
+      File="$(HeaderFile)"
+      Lines="@(TmpLines)"
+      Overwrite="false"
+      Encoding="UTF-8" />
+  
+    <WriteLinesToFile
+      File="$(HeaderFile)"
+      Lines="%3B"
+      Overwrite="false"
+      Encoding="UTF-8" />
+  
+    <Delete Files="$(TmpFile)" />
+  </Target>
+</Project>

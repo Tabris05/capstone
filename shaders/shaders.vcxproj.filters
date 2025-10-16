@@ -1,0 +1,82 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\blit.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\bloomdownsample.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\bloomupsample.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\brdfintegral.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\cube.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\cubemip.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\fxaa.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\irradiance.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\mip.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\postprocess.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\radiance.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\srgbmip.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\transparencycomposite.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\uicomposite.comp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\blend.frag">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\opaque.frag">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\skybox.frag">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\model.vert">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\prepass.vert">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\shadow.vert">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\skybox.vert">
+      <Filter>Source Files</Filter>
+    </None>
+  </ItemGroup>
+</Project>

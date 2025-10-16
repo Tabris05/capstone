@@ -1,4 +1,4 @@
-include/** linguist-vendored
-lib/** linguist-vendored
+capstone/include/** linguist-vendored
+capstone/lib/** linguist-vendored
 
 *.h linguist-language=C++
