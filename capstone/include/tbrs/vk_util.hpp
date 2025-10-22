@@ -1,7 +1,8 @@
 #ifndef VK_UTIL_HPP
 #define VK_UTIL_HPP
 
-#include <vulkan/vulkan.h>
+#include <initializer_list>
+#include <volk/volk.h>
 #include <glm/glm.hpp>
 #include "types.hpp"
 

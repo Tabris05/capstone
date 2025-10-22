@@ -413,7 +413,7 @@ void Renderer::render(f32 thisFrame) {
 	};
 
 	auto& frameData = m_perFrameData[m_frameIndex];
-	vkWaitForFences(m_device, 1, &frameData.fence, true, std::numeric_limits<u64>::max());
+	frameData.fence.wait();
 
 	while(!frameData.deletionQueue.empty()) {
 		frameData.deletionQueue.front()();
@@ -427,7 +427,6 @@ void Renderer::render(f32 thisFrame) {
 		return;
 	}
 
-	vkResetFences(m_device, 1, &frameData.fence);
 	vkResetCommandPool(m_device, frameData.cmdPool, 0);
 
 	vkBeginCommandBuffer(frameData.cmdBuffer, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
@@ -870,12 +869,21 @@ void Renderer::render(f32 thisFrame) {
 		}),
 		.commandBufferInfoCount = 1,
 		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = frameData.cmdBuffer }),
-		.signalSemaphoreInfoCount = 1,
-		.pSignalSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
-			.semaphore = m_swapchainSems[imageIndex],
-			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+		.signalSemaphoreInfoCount = 2,
+		.pSignalSemaphoreInfos = ptr({
+			VkSemaphoreSubmitInfo{
+				.semaphore = m_swapchainSems[imageIndex],
+				.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+			},
+			VkSemaphoreSubmitInfo{
+				.semaphore = m_renderSem.semaphore(),
+				.value = m_renderSem.advance(),
+				.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+			},
 		}),
-	}), frameData.fence);
+	}), nullptr);
+
+	frameData.fence = m_renderSem.fence();
 
 	result = vkQueuePresentKHR(m_graphicsQueue, ptr(VkPresentInfoKHR{
 		.waitSemaphoreCount = 1,

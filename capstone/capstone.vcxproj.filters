@@ -72,16 +72,28 @@
     <ClCompile Include="include\imgui\imgui_impl_vulkan.cpp">
       <Filter>Source Files\Dependencies</Filter>
     </ClCompile>
+    <ClCompile Include="src\semaphore.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="shared\vertex.h">
+    <ClInclude Include="..\shared\material.h">
       <Filter>Header Files\Shared</Filter>
     </ClInclude>
-    <ClInclude Include="shared\material.h">
+    <ClInclude Include="..\shared\oitnode.h">
       <Filter>Header Files\Shared</Filter>
     </ClInclude>
-    <ClInclude Include="shared\oitnode.h">
+    <ClInclude Include="..\shared\vertex.h">
       <Filter>Header Files\Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="include\resources\roboto_regular.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\renderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\semaphore.hpp">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

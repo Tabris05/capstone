@@ -113,6 +113,7 @@ Renderer::Renderer(const char* path) {
 						.descriptorBindingVariableDescriptorCount = true,
 						.runtimeDescriptorArray = true,
 						.scalarBlockLayout = true,
+						.timelineSemaphore = true,
 						.bufferDeviceAddress = true,
 						.vulkanMemoryModel = true,
 						.vulkanMemoryModelDeviceScope = true,
@@ -176,8 +177,9 @@ Renderer::Renderer(const char* path) {
 				.commandBufferCount = 1
 			}), &m_perFrameData[i].cmdBuffer);
 			vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_perFrameData[i].acquireSem);
-			vkCreateFence(m_device, ptr(VkFenceCreateInfo{ .flags = VK_FENCE_CREATE_SIGNALED_BIT }), nullptr, &m_perFrameData[i].fence);
 		}
+
+		m_renderSem = Semaphore(m_device);
 	}
 
 	// VkSurface and VkSwapchain
@@ -253,13 +255,8 @@ Renderer::Renderer(const char* path) {
 			.commandBufferCount = 1
 		}), &m_computeCmdSkyboxThread);
 
-		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_transferToComputeSemModelThread);
-		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_transferToComputeSemSkyboxThread);
-
-		vkCreateFence(m_device, ptr(VkFenceCreateInfo{}), nullptr, &m_transferFenceModelThread);
-		vkCreateFence(m_device, ptr(VkFenceCreateInfo{}), nullptr, &m_computeFenceModelThread);
-		vkCreateFence(m_device, ptr(VkFenceCreateInfo{}), nullptr, &m_transferFenceSkyboxThread);
-		vkCreateFence(m_device, ptr(VkFenceCreateInfo{}), nullptr, &m_computeFenceSkyboxThread);
+		m_modelSem = Semaphore(m_device);
+		m_skyboxSem = Semaphore(m_device);
 	}
 
 	// compute pipeline layouts
@@ -743,21 +740,16 @@ Renderer::~Renderer() {
 	for(u8 i = 0; i < m_framesInFlight; i++) {
 		vkDestroyCommandPool(m_device, m_perFrameData[i].cmdPool, nullptr);
 		vkDestroySemaphore(m_device, m_perFrameData[i].acquireSem, nullptr);
-		vkDestroyFence(m_device, m_perFrameData[i].fence, nullptr);
 	}
-
-	vkDestroyFence(m_device, m_computeFenceModelThread, nullptr);
-	vkDestroyFence(m_device, m_transferFenceModelThread, nullptr);
-	vkDestroyFence(m_device, m_computeFenceSkyboxThread, nullptr);
-	vkDestroyFence(m_device, m_transferFenceSkyboxThread, nullptr);
+	m_renderSem.destroy();
 
 	vkDestroyCommandPool(m_device, m_transferPoolSkyboxThread, nullptr);
 	vkDestroyCommandPool(m_device, m_computePoolSkyboxThread, nullptr);
-	vkDestroySemaphore(m_device, m_transferToComputeSemSkyboxThread, nullptr);
+	m_skyboxSem.destroy();
 
 	vkDestroyCommandPool(m_device, m_transferPoolModelThread, nullptr);
 	vkDestroyCommandPool(m_device, m_computePoolModelThread, nullptr);
-	vkDestroySemaphore(m_device, m_transferToComputeSemModelThread, nullptr);
+	m_modelSem.destroy();
 
 	vkDestroyPipeline(m_device, m_blitPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_fxaaPipeline, nullptr);

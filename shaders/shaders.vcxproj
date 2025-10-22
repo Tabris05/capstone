@@ -123,6 +123,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\types.glsl" />
+    <ClInclude Include="src\utils.glsl" />
+    <ClInclude Include="src\pbr.glsl" />
+    <ClInclude Include="src\extensions.glsl" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="src\blend.frag" />
     <None Include="src\blit.comp" />
     <None Include="src\bloomdownsample.comp" />
@@ -149,67 +155,30 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <PropertyGroup>
-  	<GLSLC_PATH>$(ProjectDir)/bin/glslc.exe</GLSLC_PATH>
-	  <OutDir>$(ProjectDir)/output/shaders/</OutDir>
-    <GLSLC_Opts>-I &quot;$(SolutionDir)/shared&quot; -mfmt=c -o</GLSLC_Opts>
+    <GLSLC_PATH>$(ProjectDir)/bin/glslc.exe</GLSLC_PATH>
+    <OutDir>$(ProjectDir)/output/shaders/</OutDir>
+    <GLSLC_Opts>-I "$(SolutionDir)/shared" -mfmt=c --target-env=vulkan1.4 -o</GLSLC_Opts>
   </PropertyGroup>
-
-<ItemGroup>
-  <ShaderFiles Include="@(None)">
-    <OutFilename>$(OutDir)%(Filename)_$([System.String]::Copy('%(Extension)').Substring(1))</OutFilename>
-  </ShaderFiles>
-</ItemGroup>
-
-  <Target Name="CompileShaders"
-    Inputs="@(ShaderFiles)"
-    Outputs="@(ShaderFiles -> '%(OutFilename)')"
-    BeforeTargets="ClCompile">
-
+  <ItemGroup>
+    <ShaderFiles Include="@(None)">
+      <OutFilename>$(OutDir)%(Filename)_$([System.String]::Copy('%(Extension)').Substring(1))</OutFilename>
+    </ShaderFiles>
+  </ItemGroup>
+  <Target Name="CompileShaders" Inputs="@(ShaderFiles)" Outputs="@(ShaderFiles -> '%(OutFilename)')" BeforeTargets="ClCompile">
     <MakeDir Directories="$(OutDir)" />
     <Exec Command="&quot;$(GLSLC_PATH)&quot; &quot;%(ShaderFiles.Identity)&quot; $(GLSLC_Opts) &quot;%(ShaderFiles.OutFilename).tmp&quot;" />
   </Target>
-
-  <Target Name="WriteShaderHeaders"
-        Inputs="@(ShaderFiles->'%(OutFilename).tmp')"
-        Outputs="@(ShaderFiles->'%(OutFilename).h')"
-        AfterTargets="CompileShaders">
-
-  <MakeDir Directories="$(OutDir)" />
-
-  <!-- Call the same project for each ShaderFiles item; each call gets its own item/property scope -->
-  <MSBuild
-    Projects="$(MSBuildProjectFile)"
-    Targets="WriteSingleHeader"
-    BuildInParallel="true"
-    Properties="TmpFile=%(ShaderFiles.OutFilename).tmp;
-                HeaderFile=%(ShaderFiles.OutFilename).h;
-                ArrayName=%(ShaderFiles.Filename)_$([System.String]::Copy('%(ShaderFiles.Extension)').Substring(1))" />
+  <Target Name="WriteShaderHeaders" Inputs="@(ShaderFiles->'%(OutFilename).tmp')" Outputs="@(ShaderFiles->'%(OutFilename).h')" AfterTargets="CompileShaders">
+    <MakeDir Directories="$(OutDir)" />
+    <MSBuild Projects="$(MSBuildProjectFile)" Targets="WriteSingleHeader" BuildInParallel="true" Properties="TmpFile=%(ShaderFiles.OutFilename).tmp;&#xD;&#xA; HeaderFile=%(ShaderFiles.OutFilename).h;&#xD;&#xA; ArrayName=%(ShaderFiles.Filename)_$([System.String]::Copy('%(ShaderFiles.Extension)').Substring(1))" />
   </Target>
-
   <Target Name="WriteSingleHeader" Inputs="$(TmpFile)" Outputs="$(HeaderFile)">
-  
     <ReadLinesFromFile File="$(TmpFile)">
       <Output TaskParameter="Lines" ItemName="TmpLines" />
     </ReadLinesFromFile>
-  
-    <WriteLinesToFile
-      File="$(HeaderFile)"
-      Lines="#include %3Cinitializer_list>;constexpr std::initializer_list%3Cunsigned int> $(ArrayName) = "
-      Overwrite="true"
-      Encoding="UTF-8" />
-  
-    <WriteLinesToFile
-      File="$(HeaderFile)"
-      Lines="@(TmpLines)"
-      Overwrite="false"
-      Encoding="UTF-8" />
-  
-    <WriteLinesToFile
-      File="$(HeaderFile)"
-      Lines="%3B"
-      Overwrite="false"
-      Encoding="UTF-8" />
-  
+    <WriteLinesToFile File="$(HeaderFile)" Lines="#include %3Cinitializer_list&gt;;constexpr std::initializer_list%3Cunsigned int&gt; $(ArrayName) = " Overwrite="true" Encoding="UTF-8" />
+    <WriteLinesToFile File="$(HeaderFile)" Lines="@(TmpLines)" Overwrite="false" Encoding="UTF-8" />
+    <WriteLinesToFile File="$(HeaderFile)" Lines="%3B" Overwrite="false" Encoding="UTF-8" />
     <Delete Files="$(TmpFile)" />
   </Target>
 </Project>

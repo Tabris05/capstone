@@ -14,6 +14,7 @@
 #include <imgui/imgui.h>
 #include <future>
 #include <queue>
+#include "semaphore.hpp"
 
 class Renderer {
 	public:
@@ -117,7 +118,7 @@ class Renderer {
 			VkCommandPool cmdPool;
 			VkCommandBuffer cmdBuffer;
 			VkSemaphore acquireSem;
-			VkFence fence;
+			Fence fence;
 			std::queue<std::function<void(void)>> deletionQueue;
 		} m_perFrameData[m_framesInFlight];
 
@@ -175,14 +176,6 @@ class Renderer {
 		VkCommandPool m_computePoolSkyboxThread = {};
 		VkCommandBuffer m_computeCmdSkyboxThread = {};
 
-		VkSemaphore m_transferToComputeSemModelThread = {};
-		VkSemaphore m_transferToComputeSemSkyboxThread = {};
-
-		VkFence m_transferFenceModelThread = {};
-		VkFence m_computeFenceModelThread = {};
-		VkFence m_transferFenceSkyboxThread = {};
-		VkFence m_computeFenceSkyboxThread = {};
-
 		VkDescriptorSetLayout m_oneImageSetLayout = {};
 		VkPipelineLayout m_oneImagePipelineLayout = {};
 		VkPipelineLayout m_transparencyCompositePipelineLayout = {};
@@ -211,6 +204,10 @@ class Renderer {
 		VkPipeline m_bloomUpsamplePipeline = {};
 		VkPipeline m_fxaaPipeline = {};
 		VkPipeline m_blitPipeline = {};
+
+		Semaphore m_renderSem;
+		Semaphore m_modelSem;
+		Semaphore m_skyboxSem;
 
 		Buffer m_poissonDiskBuffer;
 		Buffer m_oitBuffer;

@@ -28,10 +28,11 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmdSkyboxThread }),
 		.signalSemaphoreInfoCount = 1,
 		.pSignalSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
-			.semaphore = m_transferToComputeSemSkyboxThread,
+			.semaphore = m_skyboxSem.semaphore(),
+			.value = m_skyboxSem.advance(),
 			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
 		})
-	}), m_transferFenceSkyboxThread);
+	}), nullptr);
 	m_dmaTransferLock.unlock();
 
 	u8 cubeMips = std::log2(cubeSize) + 1;
@@ -205,21 +206,25 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 	vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
 		.waitSemaphoreInfoCount = 1,
 		.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
-			.semaphore = m_transferToComputeSemSkyboxThread,
+			.semaphore = m_skyboxSem.semaphore(),
+			.value = m_skyboxSem.submittedValue(),
 			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
 		}),
 		.commandBufferInfoCount = 1,
-		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmdSkyboxThread })
-	}), m_computeFenceSkyboxThread);
+		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmdSkyboxThread }),
+		.signalSemaphoreInfoCount = 1,
+		.pSignalSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
+			.semaphore = m_skyboxSem.semaphore(),
+			.value = m_skyboxSem.advance(),
+			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+		}),
+	}), nullptr);
 	m_asyncComputeLock.unlock();
 
-	vkWaitForFences(m_device, 1, &m_transferFenceSkyboxThread, true, std::numeric_limits<u64>::max());
-	vkResetFences(m_device, 1, &m_transferFenceSkyboxThread);
+	m_skyboxSem.wait();
 	vkResetCommandPool(m_device, m_transferPoolSkyboxThread, 0);
 	destroyBuffer(stagingBuffer);
 
-	vkWaitForFences(m_device, 1, &m_computeFenceSkyboxThread, true, std::numeric_limits<u64>::max());
-	vkResetFences(m_device, 1, &m_computeFenceSkyboxThread);
 	vkResetCommandPool(m_device, m_computePoolSkyboxThread, 0);
 	destroyImage(srcImg);
 

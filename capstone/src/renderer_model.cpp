@@ -386,26 +386,33 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmdModelThread }),
 		.signalSemaphoreInfoCount = 1,
 		.pSignalSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
-			.semaphore = m_transferToComputeSemModelThread,
+			.semaphore = m_modelSem.semaphore(),
+			.value = m_modelSem.advance(),
 			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
 		})
-	}), m_transferFenceModelThread);
+	}), nullptr);
 	m_dmaTransferLock.unlock();
 
 	m_asyncComputeLock.lock();
 	vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
 		.waitSemaphoreInfoCount = 1,
 		.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
-			.semaphore = m_transferToComputeSemModelThread,
+			.semaphore = m_modelSem.semaphore(),
+			.value = m_modelSem.submittedValue(),
 			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
 		}),
 		.commandBufferInfoCount = 1,
-		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmdModelThread })
-	}), m_computeFenceModelThread);
+		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmdModelThread }),
+		.signalSemaphoreInfoCount = 1,
+		.pSignalSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
+			.semaphore = m_modelSem.semaphore(),
+			.value = m_modelSem.advance(),
+			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+		}),
+	}), nullptr);
 	m_asyncComputeLock.unlock();
 
-	vkWaitForFences(m_device, 1, &m_transferFenceModelThread, true, std::numeric_limits<u64>::max());
-	vkResetFences(m_device, 1, &m_transferFenceModelThread);
+	m_modelSem.wait();
 
 	for(Buffer i : imageStagingBuffers) {
 		destroyBuffer(i);
@@ -417,9 +424,6 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	destroyBuffer(stagingIndirectBuffer);
 
 	vkResetCommandPool(m_device, m_transferPoolModelThread, 0);
-
-	vkWaitForFences(m_device, 1, &m_computeFenceModelThread, true, std::numeric_limits<u64>::max());
-	vkResetFences(m_device, 1, &m_computeFenceModelThread);
 
 	for(VkImageView i : mipViews) {
 		vkDestroyImageView(m_device, i, nullptr);
