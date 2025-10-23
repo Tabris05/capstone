@@ -9,10 +9,18 @@
 #include <numbers>
 #include <fstream>
 
+void Renderer::onResize() {
+	m_swapchainDirty = true;
+}
+
+void Renderer::onScroll(f32 scroll) {
+	m_scroll = scroll;
+}
+
 void Renderer::run() {
 	f32 thisFrame = 0.0f;
 	f32 lastFrame = 0.0f;
-	while(!glfwWindowShouldClose(m_window)) {
+	while(!m_window.shouldClose()) {
 		glfwPollEvents();
 
 		if(const ImGuiIO& io = ImGui::GetIO(); !io.WantCaptureMouse && !io.WantCaptureKeyboard) {
@@ -27,44 +35,44 @@ void Renderer::run() {
 
 void Renderer::handleInput(f32 deltaTime) {
 	if(m_camIdx == 1) {
-		if(glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS) {
+		if(m_window.getButton(GLFW_KEY_W) == GLFW_PRESS) {
 			m_position += m_speed * m_rotation * glm::vec3(deltaTime);
 		}
-		if(glfwGetKey(m_window, GLFW_KEY_S) == GLFW_PRESS) {
+		if(m_window.getButton(GLFW_KEY_S) == GLFW_PRESS) {
 			m_position -= m_speed * m_rotation * glm::vec3(deltaTime);
 		}
-		if(glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS) {
+		if(m_window.getButton(GLFW_KEY_D) == GLFW_PRESS) {
 			m_position += m_speed * glm::normalize(glm::cross(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f))) * glm::vec3(deltaTime);
 		}
-		if(glfwGetKey(m_window, GLFW_KEY_A) == GLFW_PRESS) {
+		if(m_window.getButton(GLFW_KEY_A) == GLFW_PRESS) {
 			m_position -= m_speed * glm::normalize(glm::cross(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f))) * glm::vec3(deltaTime);
 		}
-		if(glfwGetKey(m_window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+		if(m_window.getButton(GLFW_KEY_SPACE) == GLFW_PRESS) {
 			m_position += m_speed * glm::vec3(0.0f, 1.0f, 0.0f) * glm::vec3(deltaTime);
 		}
-		if(glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
+		if(m_window.getButton(GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
 			m_position -= m_speed * glm::vec3(0.0f, 1.0f, 0.0f) * glm::vec3(deltaTime);
 		}
-		if(glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+		if(m_window.getButton(GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
 			m_speed = 5.76;
 		}
-		else if(glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT) == GLFW_RELEASE) {
+		else if(m_window.getButton(GLFW_KEY_LEFT_SHIFT) == GLFW_RELEASE) {
 			m_speed = 1.44f;
 		}
 
-		if(glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-			glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		if(m_window.getButton(GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+			m_window.hideCursor();
 
 			if(m_firstClick) {
 				m_firstClick = false;
-				glfwSetCursorPos(m_window, m_width / 2, m_height / 2);
+				m_window.centerCursor();
 			}
 
 			f64 mouseX, mouseY;
-			glfwGetCursorPos(m_window, &mouseX, &mouseY);
+			m_window.getCursorPos(&mouseX, &mouseY);
 
-			f32 rotX = m_sensitivity * 200.0f * static_cast<f32>(mouseX - (m_width / 2)) / m_width;
-			f32 rotY = m_sensitivity * 200.0f * static_cast<f32>(mouseY - (m_height / 2)) / m_height;
+			f32 rotX = m_sensitivity * 200.0f * static_cast<f32>(mouseX - (m_window.width() / 2)) / m_window.width();
+			f32 rotY = m_sensitivity * 200.0f * static_cast<f32>(mouseY - (m_window.height() / 2)) / m_window.height();
 
 			f32 oldPitch = glm::degrees(std::asin(m_rotation.y));
 			f32 newPitch = glm::clamp(oldPitch - rotY, -m_maxPitch, m_maxPitch);
@@ -72,32 +80,32 @@ void Renderer::handleInput(f32 deltaTime) {
 
 			m_rotation = glm::rotate(m_rotation, glm::radians(-rotX), glm::vec3(0.0f, 1.0f, 0.0f));
 			m_rotation = glm::rotate(m_rotation, glm::radians(deltaPitch), glm::normalize(glm::cross(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f))));
-			glfwSetCursorPos(m_window, m_width / 2, m_height / 2);
+			m_window.centerCursor();
 		}
-		else if(glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE) {
-			glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		else if(m_window.getButton(GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE) {
+			m_window.showCursor();
 			m_firstClick = true;
 		}
 		m_scroll = 0.0f;
 	}
 	else {
-		if(glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS || m_scroll != 0.0f) {
-			glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		if(m_window.getButton(GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS || m_scroll != 0.0f) {
+			m_window.hideCursor();
 
 			if(m_firstClick) {
 				m_firstClick = false;
-				glfwSetCursorPos(m_window, m_width / 2.0, m_height / 2.0);
+				m_window.centerCursor();
 			}
 
 			f64 mouseX, mouseY;
-			glfwGetCursorPos(m_window, &mouseX, &mouseY);
+			m_window.getCursorPos(&mouseX, &mouseY);
 
 			f32 distance = glm::length(m_position);
 			f32 yaw = glm::degrees(std::atan2(m_position.x, m_position.z));
 			f32 pitch = glm::degrees(std::asin(m_position.y / distance));
 
-			f32 rotX = m_sensitivity * 200.0f * static_cast<f32>(mouseX - (m_width / 2)) / m_width;
-			f32 rotY = m_sensitivity * 200.0f * static_cast<f32>(mouseY - (m_height / 2)) / m_height;
+			f32 rotX = m_sensitivity * 200.0f * static_cast<f32>(mouseX - (m_window.width() / 2)) / m_window.width();
+			f32 rotY = m_sensitivity * 200.0f * static_cast<f32>(mouseY - (m_window.height() / 2)) / m_window.height();
 
 			yaw -= rotX;
 			pitch = glm::clamp(pitch + rotY, -m_maxPitch, m_maxPitch);
@@ -111,10 +119,10 @@ void Renderer::handleInput(f32 deltaTime) {
 
 			m_rotation = glm::normalize(-m_position);
 
-			glfwSetCursorPos(m_window, m_width / 2, m_height / 2);
+			m_window.centerCursor();
 		}
-		else if(glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE) {
-			glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		else if(m_window.getButton(GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE) {
+			m_window.showCursor();
 			m_firstClick = true;
 		}
 	}
@@ -204,7 +212,7 @@ void Renderer::render(f32 thisFrame) {
 				nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
 					.filterList = ptr({ nfdu8filteritem_t{ "glTF Binary", "glb" }, nfdu8filteritem_t{ "glTF Seperate", "gltf" } }),
 					.filterCount = 2,
-					.parentWindow = m_nativeHandle
+					.parentWindow = m_window.nfdHandle()
 				}));
 
 				Model model;
@@ -231,7 +239,7 @@ void Renderer::render(f32 thisFrame) {
 				nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
 					.filterList = ptr(nfdu8filteritem_t{ "Environment Map", "hdr" }),
 					.filterCount = 1,
-					.parentWindow = m_nativeHandle
+					.parentWindow = m_window.nfdHandle()
 				}));
 
 				Skybox skybox;
@@ -255,7 +263,7 @@ void Renderer::render(f32 thisFrame) {
 				nfdresult_t result = NFD_SaveDialogU8_With(&outPath, ptr(nfdsavedialogu8args_t{
 					.filterList = ptr(nfdu8filteritem_t{ "vkModelViewer Scene", "mvs" }),
 					.filterCount = 1,
-					.parentWindow = m_nativeHandle
+					.parentWindow = m_window.nfdHandle()
 				}));
 
 				if(result != NFD_OKAY) {
@@ -305,7 +313,7 @@ void Renderer::render(f32 thisFrame) {
 				nfdresult_t result = NFD_OpenDialogU8_With(&outPath, ptr(nfdopendialogu8args_t{
 					.filterList = ptr(nfdu8filteritem_t{ "vkModelViewer Scene", "mvs" }),
 					.filterCount = 1,
-					.parentWindow = m_nativeHandle
+					.parentWindow = m_window.nfdHandle()
 				}));
 
 				if(result != NFD_OKAY) {
@@ -393,7 +401,7 @@ void Renderer::render(f32 thisFrame) {
 		* glm::rotate(glm::mat4(1.0f), m_modelRoll * 2.0f * std::numbers::pi_v<f32>, glm::vec3(0.0f, 0.0f, 1.0f))
 		* m_model.baseTransform;
 	glm::mat4 view = glm::lookAt(m_position, m_camIdx == 1 ? m_position + m_rotation : glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_width) / static_cast<f32>(m_height), 0.1f);
+	glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_window.width()) / static_cast<f32>(m_window.height()), 0.1f);
 	glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f), m_lightAngle, glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 lightProjection = ortho(orthoSize, -orthoSize, -orthoSize, orthoSize, -orthoSize, orthoSize);
 	glm::mat4 camMatrixNoTranslation = projection * glm::mat4(glm::mat3(view));
@@ -409,7 +417,7 @@ void Renderer::render(f32 thisFrame) {
 		m_lightColor,
 		m_position,
 		m_lightAngle,
-		static_cast<u32>(m_width)
+		m_window.width()
 	};
 
 	auto& frameData = m_perFrameData[m_frameIndex];
@@ -421,13 +429,13 @@ void Renderer::render(f32 thisFrame) {
 	}
 
 	u32 imageIndex;
-	VkResult result = vkAcquireNextImageKHR(m_device, m_swapchain, std::numeric_limits<u64>::max(), frameData.acquireSem, nullptr, &imageIndex);
+	VkResult result = vkAcquireNextImageKHR(m_ctx.device(), m_swapchain, std::numeric_limits<u64>::max(), frameData.acquireSem, nullptr, &imageIndex);
 	if(result == VK_ERROR_OUT_OF_DATE_KHR) {
 		recreateSwapchain();
 		return;
 	}
 
-	vkResetCommandPool(m_device, frameData.cmdPool, 0);
+	vkResetCommandPool(m_ctx.device(), frameData.cmdPool, 0);
 
 	vkBeginCommandBuffer(frameData.cmdBuffer, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 
@@ -466,11 +474,11 @@ void Renderer::render(f32 thisFrame) {
 		vkCmdInitializeDepthImage(frameData.cmdBuffer, m_depthTarget.image);
 		vkCmdBarrier(frameData.cmdBuffer, { { PipelineStage::DSTarget, PipelineStage::FragmentRead }, { PipelineStage::DSTarget, PipelineStage::DSTarget } });
 
-		vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f }));
-		vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_width), static_cast<u32>(m_height) } }));
+		vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_window.width()), static_cast<f32>(m_window.height()), 0.0f, 1.0f }));
+		vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { m_window.width(), m_window.height() } }));
 
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
-			.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
+			.renderArea = { 0, 0, { m_window.width(), m_window.height() } },
 			.layerCount = 1,
 			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
 				.imageView = m_depthTarget.view,
@@ -495,7 +503,7 @@ void Renderer::render(f32 thisFrame) {
 		vkCmdBarrier(frameData.cmdBuffer, { { PipelineStage::ComputeRead, PipelineStage::ColorTarget }, { PipelineStage::DSTarget, PipelineStage::DSReadOnly } });
 
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
-			.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
+			.renderArea = { 0, 0, { m_window.width(), m_window.height() } },
 			.layerCount = 1,
 			.colorAttachmentCount = 1,
 			.pColorAttachments = ptr(VkRenderingAttachmentInfo{
@@ -588,7 +596,7 @@ void Renderer::render(f32 thisFrame) {
 			vkCmdBarrier(frameData.cmdBuffer, PipelineStage::CopyWrite, PipelineStage::FragmentRead);
 
 			vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
-				.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
+				.renderArea = { 0, 0, { m_window.width(), m_window.height() } },
 				.layerCount = 1,
 				.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
 					.imageView = m_depthTarget.view,
@@ -656,7 +664,7 @@ void Renderer::render(f32 thisFrame) {
 		vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeRead, PipelineStage::ColorTarget);
 
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
-			.renderArea = { 0, 0, { static_cast<u32>(m_width), static_cast<u32>(m_height) } },
+			.renderArea = { 0, 0, { m_window.width(), m_window.height() } },
 			.layerCount = 1,
 			.colorAttachmentCount = 1,
 			.pColorAttachments = ptr(VkRenderingAttachmentInfo{
@@ -690,7 +698,7 @@ void Renderer::render(f32 thisFrame) {
 					}
 				})
 			}));
-			vkCmdDispatch(frameData.cmdBuffer, (m_width + 7) / 8, (m_height + 7) / 8, 1);
+			vkCmdDispatch(frameData.cmdBuffer, (m_window.width() + 7) / 8, (m_window.height() + 7) / 8, 1);
 
 			vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeWrite, PipelineStage::CopyRead);
 		}
@@ -712,7 +720,7 @@ void Renderer::render(f32 thisFrame) {
 				.srcOffset = { 0, 0, 0 },
 				.dstSubresource = colorSubresourceLayers(),
 				.dstOffset = { 0, 0, 0 },
-				.extent = { static_cast<u32>(m_width), static_cast<u32>(m_height), 1 }
+				.extent = { m_window.width(), m_window.height(), 1 }
 			})
 		}));
 
@@ -799,7 +807,7 @@ void Renderer::render(f32 thisFrame) {
 			})
 		}));
 
-		vkCmdDispatch(frameData.cmdBuffer, (m_width + 7) / 8, (m_height + 7) / 8, 1);
+		vkCmdDispatch(frameData.cmdBuffer, (m_window.width() + 7) / 8, (m_window.height() + 7) / 8, 1);
 
 		vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 
@@ -830,7 +838,7 @@ void Renderer::render(f32 thisFrame) {
 				})
 			},
 		}));
-		vkCmdDispatch(frameData.cmdBuffer, (m_width + 7) / 8, (m_height + 7) / 8, 1);
+		vkCmdDispatch(frameData.cmdBuffer, (m_window.width() + 7) / 8, (m_window.height() + 7) / 8, 1);
 
 		vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 	}
@@ -854,14 +862,14 @@ void Renderer::render(f32 thisFrame) {
 				}
 			})
 		}));
-		vkCmdDispatch(frameData.cmdBuffer, (m_width + 7) / 8, (m_height + 7) / 8, 1);
+		vkCmdDispatch(frameData.cmdBuffer, (m_window.width() + 7) / 8, (m_window.height() + 7) / 8, 1);
 
 		vkCmdPreparePresent(frameData.cmdBuffer, m_swapchainImages[imageIndex]);
 	}
 
 	vkEndCommandBuffer(frameData.cmdBuffer);
 
-	vkQueueSubmit2(m_graphicsQueue, 1, ptr(VkSubmitInfo2{
+	vkQueueSubmit2(m_ctx.graphicsQueue(), 1, ptr(VkSubmitInfo2{
 		.waitSemaphoreInfoCount = 1,
 		.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
 			.semaphore = frameData.acquireSem,
@@ -885,7 +893,7 @@ void Renderer::render(f32 thisFrame) {
 
 	frameData.fence = m_renderSem.fence();
 
-	result = vkQueuePresentKHR(m_graphicsQueue, ptr(VkPresentInfoKHR{
+	result = vkQueuePresentKHR(m_ctx.graphicsQueue(), ptr(VkPresentInfoKHR{
 		.waitSemaphoreCount = 1,
 		.pWaitSemaphores = &m_swapchainSems[imageIndex],
 		.swapchainCount = 1,

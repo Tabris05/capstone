@@ -3,18 +3,18 @@
 
 #include <tbrs/types.hpp>
 #include <volk/volk.h>
-#include <glfw/glfw3.h>
 #include <glm/glm.hpp>
 #include <vector>
 #include <filesystem>
 #include <limits>
 #include <unordered_map>
 #include <fastgltf/types.hpp>
-#include <nfd/nfd.h>
 #include <imgui/imgui.h>
 #include <future>
 #include <queue>
 #include "semaphore.hpp"
+#include "context.hpp"
+#include "window.hpp"
 
 class Renderer {
 	public:
@@ -122,28 +122,13 @@ class Renderer {
 			std::queue<std::function<void(void)>> deletionQueue;
 		} m_perFrameData[m_framesInFlight];
 
-		// window
-		i32 m_width;
-		i32 m_height;
-		GLFWwindow* m_window;
-		nfdwindowhandle_t m_nativeHandle;
+		Window m_window;
 
 		// vulkan
 		u8 m_frameIndex = 0;
 		b8 m_swapchainDirty = false;
 
-		VkInstance m_instance = {};
-		VkPhysicalDevice m_physicalDevice = {};
-		VkPhysicalDeviceMemoryProperties m_memProps;
-		u32 m_maxSampledImageDescriptors;
-		VkDevice m_device;
-
-		u32 m_graphicsQueueFamily;
-		u32 m_computeQueueFamily;
-		u32 m_transferQueueFamily;
-		VkQueue m_graphicsQueue = {};
-		VkQueue m_computeQueue = {};
-		VkQueue m_transferQueue = {};
+		VulkanContext m_ctx;
 
 		VkSurfaceKHR m_surface = {};
 		VkSurfaceFormatKHR m_surfaceFormat;
@@ -272,8 +257,6 @@ class Renderer {
 
 		ImFont* m_largeFont = nullptr;
 
-		u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
-		u32 getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask);
 		void createSwapchain();
 		void recreateSwapchain();
 

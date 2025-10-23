@@ -5,34 +5,34 @@
 void Renderer::createSwapchain() {
 	VkSwapchainKHR oldSwapchain = m_swapchain;
 
-	vkCreateSwapchainKHR(m_device, ptr(VkSwapchainCreateInfoKHR{
+	vkCreateSwapchainKHR(m_ctx.device(), ptr(VkSwapchainCreateInfoKHR{
 		.surface = m_surface,
 		.minImageCount = 3,
 		.imageFormat = m_surfaceFormat.format,
 		.imageColorSpace = m_surfaceFormat.colorSpace,
-		.imageExtent = { static_cast<u32>(m_width), static_cast<u32>(m_height) },
+		.imageExtent = { m_window.width(), m_window.height() },
 		.imageArrayLayers = 1,
 		.imageUsage = VK_IMAGE_USAGE_STORAGE_BIT,
 		.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
 		.queueFamilyIndexCount = 1,
-		.pQueueFamilyIndices = ptr(m_graphicsQueueFamily),
+		.pQueueFamilyIndices = m_ctx.queueFamilies(),
 		.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
 		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
 		.presentMode = m_vsync ? VK_PRESENT_MODE_FIFO_KHR : m_nonVsyncPresentMode,
 		.clipped = true,
 		.oldSwapchain = oldSwapchain
 	}), nullptr, &m_swapchain);
-	vkDestroySwapchainKHR(m_device, oldSwapchain, nullptr);
+	vkDestroySwapchainKHR(m_ctx.device(), oldSwapchain, nullptr);
 
 	u32 numSwapchainImages;
-	vkGetSwapchainImagesKHR(m_device, m_swapchain, &numSwapchainImages, nullptr);
+	vkGetSwapchainImagesKHR(m_ctx.device(), m_swapchain, &numSwapchainImages, nullptr);
 
 	m_swapchainImages.resize(numSwapchainImages);
-	vkGetSwapchainImagesKHR(m_device, m_swapchain, &numSwapchainImages, m_swapchainImages.data());
+	vkGetSwapchainImagesKHR(m_ctx.device(), m_swapchain, &numSwapchainImages, m_swapchainImages.data());
 
 	for(VkImage img : m_swapchainImages) {
 		VkImageView curView;
-		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 			.image = img,
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
 			.format = m_surfaceFormat.format,
@@ -41,41 +41,37 @@ void Renderer::createSwapchain() {
 		m_swapchainImageViews.push_back(curView);
 
 		VkSemaphore curSem;
-		vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &curSem);
+		vkCreateSemaphore(m_ctx.device(), ptr(VkSemaphoreCreateInfo{}), nullptr, &curSem);
 		m_swapchainSems.push_back(curSem);
 	}
 
-	u32 numBloomMips = std::min(static_cast<u32>(std::floor(std::log2(std::max(m_width, m_height))) + 1), m_maxBloomMips);
-	m_oitBuffer = createBuffer(m_width * m_height * 4 * sizeof(OITNode), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	m_colorTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-	m_bloomTarget = createImage(m_width, m_height, m_colorFormat, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, numBloomMips);
-	m_depthTarget = createImage(m_width, m_height, m_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-	m_uiTarget = createImage(m_width, m_height, m_uiFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	u32 numBloomMips = std::min(static_cast<u32>(std::floor(std::log2(std::max(m_window.width(), m_window.height()))) + 1), m_maxBloomMips);
+	m_oitBuffer = createBuffer(m_window.width() * m_window.height() * 4 * sizeof(OITNode), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	m_colorTarget = createImage(m_window.width(), m_window.height(), m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+	m_bloomTarget = createImage(m_window.width(), m_window.height(), m_colorFormat, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, numBloomMips);
+	m_depthTarget = createImage(m_window.width(), m_window.height(), m_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+	m_uiTarget = createImage(m_window.width(), m_window.height(), m_uiFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 
 	for(u8 i = 0; i < numBloomMips; i++) {
 		VkImageView cur;
-		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 			.image = m_bloomTarget.image,
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
 			.format = m_colorFormat,
 			.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, VK_REMAINING_ARRAY_LAYERS }
 		}), nullptr, &cur);
 
-		m_bloomMips.push_back(std::make_pair(cur, glm::uvec2(std::max(m_width >> i, 1), std::max(m_height >> i, 1))));
+		m_bloomMips.push_back(std::make_pair(cur, glm::uvec2(std::max(m_window.width() >> i, 1u), std::max(m_window.height() >> i, 1u))));
 	}
 }
 
 void Renderer::recreateSwapchain() {
-	glfwGetFramebufferSize(m_window, &m_width, &m_height);
-	while(m_width == 0 || m_height == 0) {
-		glfwGetFramebufferSize(m_window, &m_width, &m_height);
-		glfwWaitEvents();
-	}
+	m_window.updateSize();
 
-	vkDeviceWaitIdle(m_device);
+	vkDeviceWaitIdle(m_ctx.device());
 
 	for(auto [view, _] : m_bloomMips) {
-		vkDestroyImageView(m_device, view, nullptr);
+		vkDestroyImageView(m_ctx.device(), view, nullptr);
 	}
 	m_bloomMips.clear();
 	destroyBuffer(m_oitBuffer);
@@ -84,11 +80,11 @@ void Renderer::recreateSwapchain() {
 	destroyImage(m_depthTarget);
 	destroyImage(m_uiTarget);
 	for(VkImageView view : m_swapchainImageViews) {
-		vkDestroyImageView(m_device, view, nullptr);
+		vkDestroyImageView(m_ctx.device(), view, nullptr);
 	}
 	m_swapchainImageViews.clear();
 	for(VkSemaphore sem : m_swapchainSems) {
-		vkDestroySemaphore(m_device, sem, nullptr);
+		vkDestroySemaphore(m_ctx.device(), sem, nullptr);
 	}
 	m_swapchainSems.clear();
 
@@ -97,15 +93,6 @@ void Renderer::recreateSwapchain() {
 }
 
 Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage, u32 mips, b8 cube) {
-	VkSharingMode mode = VK_SHARING_MODE_EXCLUSIVE;
-	std::vector<u32> queueFamilies{ m_graphicsQueueFamily };
-
-	if((usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) == 0) {
-		mode = VK_SHARING_MODE_CONCURRENT;
-		queueFamilies.push_back(m_computeQueueFamily);
-		queueFamilies.push_back(m_transferQueueFamily);
-	}
-	
 	VkImageCreateFlags flags = 0;
 	bool srgbStorageImage = format == VK_FORMAT_R8G8B8A8_SRGB && (usage & VK_IMAGE_USAGE_STORAGE_BIT);
 	if(srgbStorageImage) {
@@ -114,7 +101,7 @@ Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, Vk
 	}
 
 	Image image;
-	vkCreateImage(m_device, ptr(VkImageCreateInfo{
+	vkCreateImage(m_ctx.device(), ptr(VkImageCreateInfo{
 		.flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT | VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT : flags,
 		.imageType = VK_IMAGE_TYPE_2D,
 		.format = format,
@@ -123,20 +110,20 @@ Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, Vk
 		.arrayLayers = cube ? 6u : 1u,
 		.samples = VK_SAMPLE_COUNT_1_BIT,
 		.usage = usage,
-		.sharingMode = mode,
-		.queueFamilyIndexCount = static_cast<u32>(queueFamilies.size()),
-		.pQueueFamilyIndices = queueFamilies.data()
+		.sharingMode = VK_SHARING_MODE_CONCURRENT,
+		.queueFamilyIndexCount = 3,
+		.pQueueFamilyIndices = m_ctx.queueFamilies()
 	}), nullptr, &image.image);
 
 	VkMemoryRequirements mrq;
-	vkGetImageMemoryRequirements(m_device, image.image, &mrq);
-	vkAllocateMemory(m_device, ptr(VkMemoryAllocateInfo{
+	vkGetImageMemoryRequirements(m_ctx.device(), image.image, &mrq);
+	vkAllocateMemory(m_ctx.device(), ptr(VkMemoryAllocateInfo{
 		.allocationSize = mrq.size,
-		.memoryTypeIndex = getMemoryIndex(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mrq.memoryTypeBits)
+		.memoryTypeIndex = m_ctx.getMemoryIndex(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mrq.memoryTypeBits)
 	}), nullptr, &image.memory);
-	vkBindImageMemory(m_device, image.image, image.memory, 0);
+	vkBindImageMemory(m_ctx.device(), image.image, image.memory, 0);
 
-	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+	vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 		.pNext = srgbStorageImage ? ptr(VkImageViewUsageCreateInfo{ .usage = usage & ~VK_IMAGE_USAGE_STORAGE_BIT }) : nullptr,
 		.image = image.image,
 		.viewType = cube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D,
@@ -148,49 +135,49 @@ Renderer::Image Renderer::createImage(u32 width, u32 height, VkFormat format, Vk
 }
 
 void Renderer::destroyImage(Image image) {
-	vkDestroyImageView(m_device, image.view, nullptr);
-	vkDestroyImage(m_device, image.image, nullptr);
-	vkFreeMemory(m_device, image.memory, nullptr);
+	vkDestroyImageView(m_ctx.device(), image.view, nullptr);
+	vkDestroyImage(m_ctx.device(), image.image, nullptr);
+	vkFreeMemory(m_ctx.device(), image.memory, nullptr);
 }
 
 Renderer::Buffer Renderer::createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps) {
 	Buffer buffer;
-	vkCreateBuffer(m_device, ptr(VkBufferCreateInfo{
+	vkCreateBuffer(m_ctx.device(), ptr(VkBufferCreateInfo{
 		.size = size,
 		.usage = usage,
 		.sharingMode = VK_SHARING_MODE_CONCURRENT,
 		.queueFamilyIndexCount = 3,
-		.pQueueFamilyIndices = ptr({ m_graphicsQueueFamily, m_computeQueueFamily, m_transferQueueFamily })
+		.pQueueFamilyIndices = m_ctx.queueFamilies()
 	}), nullptr, &buffer.buffer);
 
 	VkMemoryRequirements mrq;
-	vkGetBufferMemoryRequirements(m_device, buffer.buffer, &mrq);
-	vkAllocateMemory(m_device, ptr(VkMemoryAllocateInfo{
+	vkGetBufferMemoryRequirements(m_ctx.device(), buffer.buffer, &mrq);
+	vkAllocateMemory(m_ctx.device(), ptr(VkMemoryAllocateInfo{
 		.pNext = (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) ? ptr(VkMemoryAllocateFlagsInfo{.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT }) : nullptr,
 		.allocationSize = mrq.size,
-		.memoryTypeIndex = getMemoryIndex(memProps, mrq.memoryTypeBits)
+		.memoryTypeIndex = m_ctx.getMemoryIndex(memProps, mrq.memoryTypeBits)
 	}), nullptr, &buffer.memory);
-	vkBindBufferMemory(m_device, buffer.buffer, buffer.memory, 0);
+	vkBindBufferMemory(m_ctx.device(), buffer.buffer, buffer.memory, 0);
 
 	if(memProps & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-		vkMapMemory(m_device, buffer.memory, 0, VK_WHOLE_SIZE, 0, &buffer.hostPtr);
+		vkMapMemory(m_ctx.device(), buffer.memory, 0, VK_WHOLE_SIZE, 0, &buffer.hostPtr);
 	}
 	else if(usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
-		buffer.devicePtr = vkGetBufferDeviceAddress(m_device, ptr(VkBufferDeviceAddressInfo{ .buffer = buffer.buffer }));
+		buffer.devicePtr = vkGetBufferDeviceAddress(m_ctx.device(), ptr(VkBufferDeviceAddressInfo{ .buffer = buffer.buffer }));
 	}
 
 	return buffer;
 }
 
 void Renderer::destroyBuffer(Buffer buffer) {
-	vkDestroyBuffer(m_device, buffer.buffer, nullptr);
-	vkFreeMemory(m_device, buffer.memory, nullptr);
+	vkDestroyBuffer(m_ctx.device(), buffer.buffer, nullptr);
+	vkFreeMemory(m_ctx.device(), buffer.memory, nullptr);
 }
 
 VkPipeline Renderer::createComputePipeline(VkPipelineLayout layout, std::initializer_list<u32> cs) {
 	VkPipeline ret;
 
-	vkCreateComputePipelines(m_device, nullptr, 1, ptr(VkComputePipelineCreateInfo{
+	vkCreateComputePipelines(m_ctx.device(), nullptr, 1, ptr(VkComputePipelineCreateInfo{
 		.stage = {
 			.pNext = ptr(VkShaderModuleCreateInfo{
 				.codeSize = cs.size() * sizeof(u32),
@@ -208,7 +195,7 @@ VkPipeline Renderer::createComputePipeline(VkPipelineLayout layout, std::initial
 VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::initializer_list<u32> vs, std::initializer_list<u32> fs, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment) {
 	VkPipeline ret;
 
-	vkCreateGraphicsPipelines(m_device, nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
+	vkCreateGraphicsPipelines(m_ctx.device(), nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
 		.pNext = ptr(VkPipelineRenderingCreateInfo{
 			.colorAttachmentCount = hasColorAttachment ? 1u : 0u,
 			.pColorAttachmentFormats = &m_colorFormat,

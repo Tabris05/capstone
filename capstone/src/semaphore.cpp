@@ -74,13 +74,6 @@ Fence Semaphore::fence() const {
 	return Fence(m_device, m_semaphore, m_value);
 }
 
-void Semaphore::destroy() {
-	if(m_device) {
-		vkDestroySemaphore(m_device, m_semaphore, nullptr);
-	}
-	m_device = nullptr;
-}
-
 VkSemaphore Semaphore::semaphore() const {
 	return m_semaphore;
 }

@@ -27,9 +27,6 @@
     <ClCompile Include="src\renderer_raii.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\renderer_util.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\renderer_resources.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -75,6 +72,12 @@
     <ClCompile Include="src\semaphore.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\context.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\window.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\shared\material.h">
@@ -93,6 +96,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\semaphore.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\context.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\window.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -35,161 +35,43 @@
 #include <resources/roboto_regular.h>
 
 Renderer::Renderer(const char* path) {
-	// glfw and NFD
+	// glfw
 	{
-		glfwInit();
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-		const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-		m_width = mode->width * 3 / 4;
-		m_height = mode->height * 3 / 4;
-
-		m_window = glfwCreateWindow(m_width, m_height, "Capstone", nullptr, nullptr);
-
-		glfwSetWindowUserPointer(m_window, this);
-		glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, i32 width, i32 height) {
+		glfwSetWindowUserPointer(m_window.window(), this);
+		glfwSetFramebufferSizeCallback(m_window.window(), [](GLFWwindow* window, i32 width, i32 height) {
 			reinterpret_cast<Renderer*>(glfwGetWindowUserPointer(window))->onResize();
 		});
-		glfwSetScrollCallback(m_window, [](GLFWwindow* window, f64 xOffset, f64 yOffset) {
+		glfwSetScrollCallback(m_window.window(), [](GLFWwindow* window, f64 xOffset, f64 yOffset) {
 			reinterpret_cast<Renderer*>(glfwGetWindowUserPointer(window))->onScroll(yOffset);
 		});
-
-		NFD_Init();
-		NFD_GetNativeWindowFromGLFWWindow(m_window, &m_nativeHandle);
-	}
-
-	// volk and VkInstance
-	{
-		volkInitialize();
-
-		u32 glfwExtensionCount = 0;
-		const char** glfwExtensions;
-		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-		vkCreateInstance(ptr(VkInstanceCreateInfo{
-			.pApplicationInfo = ptr(VkApplicationInfo{ .apiVersion = VK_API_VERSION_1_4 }),
-			.enabledExtensionCount = glfwExtensionCount,
-			.ppEnabledExtensionNames = glfwExtensions
-		}), nullptr, &m_instance);
-
-		volkLoadInstanceOnly(m_instance);
-	}
-
-	// VkPhysicalDevice, VkPhysicalDeviceMemoryProperties, and VkPhysicalDeviceProperties::limits::maxPerStageDescriptorSampledImages
-	{
-		vkEnumeratePhysicalDevices(m_instance, ptr(1u), &m_physicalDevice);
-		vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &m_memProps);
-
-		VkPhysicalDeviceProperties props;
-		vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
-		m_maxSampledImageDescriptors = std::min(props.limits.maxPerStageDescriptorSampledImages, props.limits.maxPerStageDescriptorSamplers) - 4;
-	}
-
-	// VkDevice and VkQueues
-	{
-		m_graphicsQueueFamily = getQueue(VK_QUEUE_GRAPHICS_BIT);
-		m_computeQueueFamily = getQueue(VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT);
-		m_transferQueueFamily = getQueue(VK_QUEUE_TRANSFER_BIT, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
-		vkCreateDevice(m_physicalDevice, ptr(VkDeviceCreateInfo{
-			.pNext = ptr(VkPhysicalDeviceFeatures2{
-				.pNext = ptr(VkPhysicalDeviceVulkan11Features{
-					.pNext = ptr(VkPhysicalDeviceVulkan12Features{
-						.pNext = ptr(VkPhysicalDeviceVulkan13Features{
-							.pNext = ptr(VkPhysicalDeviceVulkan14Features{
-								.pNext = ptr(VkPhysicalDeviceRobustness2FeaturesEXT{
-									.pNext = ptr(VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT{
-										.pNext = ptr(VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR{.shaderMaximalReconvergence = true }),
-										.fragmentShaderPixelInterlock = true
-									}),
-									.nullDescriptor = true
-								}),
-								.maintenance5 = true,
-								.pushDescriptor = true,
-							}),
-							.synchronization2 = true,
-							.dynamicRendering = true
-						}),
-						.shaderSampledImageArrayNonUniformIndexing = true,
-						.descriptorBindingVariableDescriptorCount = true,
-						.runtimeDescriptorArray = true,
-						.scalarBlockLayout = true,
-						.timelineSemaphore = true,
-						.bufferDeviceAddress = true,
-						.vulkanMemoryModel = true,
-						.vulkanMemoryModelDeviceScope = true,
-						.vulkanMemoryModelAvailabilityVisibilityChains = true
-					}),
-					.shaderDrawParameters = true,
-				}),
-				.features{
-					.multiDrawIndirect = true,
-					.drawIndirectFirstInstance = true,
-					.samplerAnisotropy = true,
-					.fragmentStoresAndAtomics = true,
-					.shaderStorageImageReadWithoutFormat = true,
-					.shaderStorageImageWriteWithoutFormat = true,
-					.shaderInt64 = true
-				}
-			}),
-			.queueCreateInfoCount = 3,
-			.pQueueCreateInfos = ptr({
-				VkDeviceQueueCreateInfo{
-					.queueFamilyIndex = m_graphicsQueueFamily,
-					.queueCount = 1,
-					.pQueuePriorities = ptr(1.0f)
-				},
-				VkDeviceQueueCreateInfo{
-					.queueFamilyIndex = m_computeQueueFamily,
-					.queueCount = 1,
-					.pQueuePriorities = ptr(1.0f)
-				},
-				VkDeviceQueueCreateInfo{
-					.queueFamilyIndex = m_transferQueueFamily,
-					.queueCount = 1,
-					.pQueuePriorities = ptr(1.0f)
-				}
-			}),
-			.enabledExtensionCount = 4,
-			.ppEnabledExtensionNames = ptr<const char*>({
-				VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-				VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
-				VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME,
-				VK_KHR_SHADER_MAXIMAL_RECONVERGENCE_EXTENSION_NAME
-			}),
-		}), nullptr, &m_device);
-
-		volkLoadDevice(m_device);
-		vkGetDeviceQueue(m_device, m_graphicsQueueFamily, 0, &m_graphicsQueue);
-		vkGetDeviceQueue(m_device, m_computeQueueFamily, 0, &m_computeQueue);
-		vkGetDeviceQueue(m_device, m_transferQueueFamily, 0, &m_transferQueue);
 	}
 
 	// per-frame data (vk::CommandPool, vk::CommandBuffer, vk::Semaphores, vk::Fence)
 	{
 		for(u8 i = 0; i < m_framesInFlight; i++) {
-			vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+			vkCreateCommandPool(m_ctx.device(), ptr(VkCommandPoolCreateInfo{
 				.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-				.queueFamilyIndex = m_graphicsQueueFamily
+				.queueFamilyIndex = m_ctx.queueFamilies()[0]
 			}), nullptr, &m_perFrameData[i].cmdPool);
-			vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+			vkAllocateCommandBuffers(m_ctx.device(), ptr(VkCommandBufferAllocateInfo{
 				.commandPool = m_perFrameData[i].cmdPool,
 				.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 				.commandBufferCount = 1
 			}), &m_perFrameData[i].cmdBuffer);
-			vkCreateSemaphore(m_device, ptr(VkSemaphoreCreateInfo{}), nullptr, &m_perFrameData[i].acquireSem);
+			vkCreateSemaphore(m_ctx.device(), ptr(VkSemaphoreCreateInfo{}), nullptr, &m_perFrameData[i].acquireSem);
 		}
 
-		m_renderSem = Semaphore(m_device);
+		m_renderSem = Semaphore(m_ctx.device());
 	}
 
 	// VkSurface and VkSwapchain
 	{
-		glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface);
+		glfwCreateWindowSurface(m_ctx.instance(), m_window.window(), nullptr, &m_surface);
 
 		u32 count = 0;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, &count, nullptr);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(m_ctx.physicalDevice(), m_surface, &count, nullptr);
 		std::vector<VkSurfaceFormatKHR> formats(count);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, &count, formats.data());
+		vkGetPhysicalDeviceSurfaceFormatsKHR(m_ctx.physicalDevice(), m_surface, &count, formats.data());
 		m_surfaceFormat = formats.front();
 		for(auto format : formats) {
 			if(!vkuFormatIsSRGB(format.format)) {
@@ -199,9 +81,9 @@ Renderer::Renderer(const char* path) {
 		}
 
 		count = 0;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface, &count, nullptr);
+		vkGetPhysicalDeviceSurfacePresentModesKHR(m_ctx.physicalDevice(), m_surface, &count, nullptr);
 		std::vector<VkPresentModeKHR> modes(count);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface, &count, modes.data());
+		vkGetPhysicalDeviceSurfacePresentModesKHR(m_ctx.physicalDevice(), m_surface, &count, modes.data());
 		
 		for(auto mode : modes) {
 			if(mode == VK_PRESENT_MODE_MAILBOX_KHR) {
@@ -215,53 +97,53 @@ Renderer::Renderer(const char* path) {
 
 	// transfer objects
 	{
-		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+		vkCreateCommandPool(m_ctx.device(), ptr(VkCommandPoolCreateInfo{
 			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-			.queueFamilyIndex = m_transferQueueFamily
+			.queueFamilyIndex = m_ctx.queueFamilies()[2]
 		}), nullptr, &m_transferPoolModelThread);
-		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+		vkAllocateCommandBuffers(m_ctx.device(), ptr(VkCommandBufferAllocateInfo{
 			.commandPool = m_transferPoolModelThread,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1
 		}), &m_transferCmdModelThread);
 
-		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+		vkCreateCommandPool(m_ctx.device(), ptr(VkCommandPoolCreateInfo{
 			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-			.queueFamilyIndex = m_transferQueueFamily
+			.queueFamilyIndex = m_ctx.queueFamilies()[2]
 			}), nullptr, &m_transferPoolSkyboxThread);
-		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+		vkAllocateCommandBuffers(m_ctx.device(), ptr(VkCommandBufferAllocateInfo{
 			.commandPool = m_transferPoolSkyboxThread,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1
 			}), &m_transferCmdSkyboxThread);
 
-		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+		vkCreateCommandPool(m_ctx.device(), ptr(VkCommandPoolCreateInfo{
 			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-			.queueFamilyIndex = m_computeQueueFamily
+			.queueFamilyIndex = m_ctx.queueFamilies()[1]
 		}), nullptr, &m_computePoolModelThread);
-		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+		vkAllocateCommandBuffers(m_ctx.device(), ptr(VkCommandBufferAllocateInfo{
 			.commandPool = m_computePoolModelThread,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1
 		}), &m_computeCmdModelThread);
 
-		vkCreateCommandPool(m_device, ptr(VkCommandPoolCreateInfo{
+		vkCreateCommandPool(m_ctx.device(), ptr(VkCommandPoolCreateInfo{
 			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-			.queueFamilyIndex = m_computeQueueFamily
+			.queueFamilyIndex = m_ctx.queueFamilies()[1]
 			}), nullptr, &m_computePoolSkyboxThread);
-		vkAllocateCommandBuffers(m_device, ptr(VkCommandBufferAllocateInfo{
+		vkAllocateCommandBuffers(m_ctx.device(), ptr(VkCommandBufferAllocateInfo{
 			.commandPool = m_computePoolSkyboxThread,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1
 		}), &m_computeCmdSkyboxThread);
 
-		m_modelSem = Semaphore(m_device);
-		m_skyboxSem = Semaphore(m_device);
+		m_modelSem = Semaphore(m_ctx.device());
+		m_skyboxSem = Semaphore(m_ctx.device());
 	}
 
 	// compute pipeline layouts
 	{
-		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
 			.bindingCount = 1,
 			.pBindings = ptr(VkDescriptorSetLayoutBinding{
@@ -272,12 +154,12 @@ Renderer::Renderer(const char* path) {
 			})
 		}), nullptr, &m_oneImageSetLayout);
 
-		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
 			.pSetLayouts = &m_oneImageSetLayout
 		}), nullptr, &m_oneImagePipelineLayout);
 
-		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
 			.bindingCount = 2,
 			.pBindings = ptr({
@@ -296,12 +178,12 @@ Renderer::Renderer(const char* path) {
 			})
 		}), nullptr, &m_twoImageSetLayout);
 
-		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
 			.pSetLayouts = &m_twoImageSetLayout
 		}), nullptr, &m_twoImagePipelineLayout);
 
-		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
 			.bindingCount = 2,
 			.pBindings = ptr({
@@ -320,12 +202,12 @@ Renderer::Renderer(const char* path) {
 			})
 		}), nullptr, &m_oneTexOneImageSetLayout);
 
-		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
 			.pSetLayouts = &m_oneTexOneImageSetLayout
 		}), nullptr, &m_oneTexOneImagePipelineLayout);
 
-		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
 			.pSetLayouts = &m_oneTexOneImageSetLayout,
 			.pushConstantRangeCount = 1,
@@ -336,7 +218,7 @@ Renderer::Renderer(const char* path) {
 			})
 		}), nullptr, &m_bloomPipelineLayout);
 
-		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
 			.bindingCount = 3,
 			.pBindings = ptr({
@@ -361,7 +243,7 @@ Renderer::Renderer(const char* path) {
 			})
 		}), nullptr, &m_threeImageSetLayout);
 
-		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
 			.pSetLayouts = &m_twoImageSetLayout,
 			.pushConstantRangeCount = 1,
@@ -372,7 +254,7 @@ Renderer::Renderer(const char* path) {
 			})
 		}), nullptr, &m_postprocessingPipelineLayout);
 
-		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
 			.pSetLayouts = &m_oneImageSetLayout,
 			.pushConstantRangeCount = 1,
@@ -404,7 +286,7 @@ Renderer::Renderer(const char* path) {
 
 	// global samplers
 	{
-		vkCreateSampler(m_device, ptr(VkSamplerCreateInfo{
+		vkCreateSampler(m_ctx.device(), ptr(VkSamplerCreateInfo{
 			.magFilter = VK_FILTER_LINEAR,
 			.minFilter = VK_FILTER_LINEAR,
 			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
@@ -416,7 +298,7 @@ Renderer::Renderer(const char* path) {
 			.maxLod = VK_LOD_CLAMP_NONE
 		}), nullptr, &m_skyboxSampler);
 
-		vkCreateSampler(m_device, ptr(VkSamplerCreateInfo{
+		vkCreateSampler(m_ctx.device(), ptr(VkSamplerCreateInfo{
 			.magFilter = VK_FILTER_LINEAR,
 			.minFilter = VK_FILTER_LINEAR,
 			.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
@@ -458,13 +340,13 @@ Renderer::Renderer(const char* path) {
 
 		vkEndCommandBuffer(m_computeCmdModelThread);
 
-		vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
+		vkQueueSubmit2(m_ctx.computeQueue(), 1, ptr(VkSubmitInfo2{
 			.commandBufferInfoCount = 1,
 			.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_computeCmdModelThread })
 		}), nullptr);
 
-		vkQueueWaitIdle(m_computeQueue);
-		vkResetCommandPool(m_device, m_computePoolModelThread, 0);
+		vkQueueWaitIdle(m_ctx.computeQueue());
+		vkResetCommandPool(m_ctx.device(), m_computePoolModelThread, 0);
 	}
 
 	// Allocate Shadow Map
@@ -499,20 +381,20 @@ Renderer::Renderer(const char* path) {
 		vkCmdCopyBuffer(m_transferCmdModelThread, poissonDiskStagingBuffer.buffer, m_poissonDiskBuffer.buffer, 1, ptr(VkBufferCopy{ .size = poissonDiskBufferSize }));
 		vkEndCommandBuffer(m_transferCmdModelThread);
 
-		vkQueueSubmit2(m_transferQueue, 1, ptr(VkSubmitInfo2{
+		vkQueueSubmit2(m_ctx.transferQueue(), 1, ptr(VkSubmitInfo2{
 			.commandBufferInfoCount = 1,
 			.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmdModelThread })
 		}), nullptr);
 
-		vkQueueWaitIdle(m_transferQueue);
-		vkResetCommandPool(m_device, m_transferPoolModelThread, 0);
+		vkQueueWaitIdle(m_ctx.transferQueue());
+		vkResetCommandPool(m_ctx.device(), m_transferPoolModelThread, 0);
 		
 		destroyBuffer(poissonDiskStagingBuffer);
 	}
 
 	// Color Pass Pipelines
 	{
-		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
 			.pNext = ptr(VkDescriptorSetLayoutBindingFlagsCreateInfo{
 				.bindingCount = 1,
 				.pBindingFlags = ptr<VkDescriptorBindingFlags>(VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)
@@ -521,12 +403,12 @@ Renderer::Renderer(const char* path) {
 			.pBindings = ptr(VkDescriptorSetLayoutBinding{
 				.binding = 0,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = m_maxSampledImageDescriptors,
+				.descriptorCount = m_ctx.maxSampledDescriptors(),
 				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
 			})
 		}), nullptr, &m_modelSetLayout);
 
-		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
 			.bindingCount = 4,
 			.pBindings = ptr({
@@ -556,7 +438,7 @@ Renderer::Renderer(const char* path) {
 			})
 		}), nullptr, &m_modelPushDescriptorLayout);
 
-		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 2,
 			.pSetLayouts = ptr({ m_modelSetLayout, m_modelPushDescriptorLayout }),
 			.pushConstantRangeCount = 1,
@@ -579,7 +461,7 @@ Renderer::Renderer(const char* path) {
 
 	// Skybox Pipeline
 	{
-		vkCreateDescriptorSetLayout(m_device, ptr(VkDescriptorSetLayoutCreateInfo{
+		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
 			.bindingCount = 1,
 			.pBindings = ptr(VkDescriptorSetLayoutBinding{
@@ -589,7 +471,7 @@ Renderer::Renderer(const char* path) {
 			})
 		}), nullptr, &m_skyboxSetLayout);
 
-		vkCreatePipelineLayout(m_device, ptr(VkPipelineLayoutCreateInfo{
+		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
 			.setLayoutCount = 1,
 			.pSetLayouts = &m_skyboxSetLayout,
 			.pushConstantRangeCount = 1,
@@ -606,14 +488,14 @@ Renderer::Renderer(const char* path) {
 	// ImGui
 	{
 		ImGui::CreateContext();
-		ImGui_ImplGlfw_InitForVulkan(m_window, true);
+		ImGui_ImplGlfw_InitForVulkan(m_window.window(), true);
 		ImGui_ImplVulkan_Init(ptr(ImGui_ImplVulkan_InitInfo{
 			.ApiVersion = VK_API_VERSION_1_4,
-			.Instance = m_instance,
-			.PhysicalDevice = m_physicalDevice,
-			.Device = m_device,
-			.QueueFamily = m_graphicsQueueFamily,
-			.Queue = m_graphicsQueue,
+			.Instance = m_ctx.instance(),
+			.PhysicalDevice = m_ctx.physicalDevice(),
+			.Device = m_ctx.device(),
+			.QueueFamily = m_ctx.queueFamilies()[0],
+			.Queue = m_ctx.graphicsQueue(),
 			.MinImageCount = 3,
 			.ImageCount = 3,
 			.DescriptorPoolSize = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE,
@@ -731,75 +613,72 @@ Renderer::Renderer(const char* path) {
 }
 
 Renderer::~Renderer() {
-	vkDeviceWaitIdle(m_device);
+	vkDeviceWaitIdle(m_ctx.device());
 
 	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
 
 	for(u8 i = 0; i < m_framesInFlight; i++) {
-		vkDestroyCommandPool(m_device, m_perFrameData[i].cmdPool, nullptr);
-		vkDestroySemaphore(m_device, m_perFrameData[i].acquireSem, nullptr);
+		vkDestroyCommandPool(m_ctx.device(), m_perFrameData[i].cmdPool, nullptr);
+		vkDestroySemaphore(m_ctx.device(), m_perFrameData[i].acquireSem, nullptr);
 	}
-	m_renderSem.destroy();
 
-	vkDestroyCommandPool(m_device, m_transferPoolSkyboxThread, nullptr);
-	vkDestroyCommandPool(m_device, m_computePoolSkyboxThread, nullptr);
-	m_skyboxSem.destroy();
+	vkDestroyCommandPool(m_ctx.device(), m_transferPoolSkyboxThread, nullptr);
+	vkDestroyCommandPool(m_ctx.device(), m_computePoolSkyboxThread, nullptr);
 
-	vkDestroyCommandPool(m_device, m_transferPoolModelThread, nullptr);
-	vkDestroyCommandPool(m_device, m_computePoolModelThread, nullptr);
-	m_modelSem.destroy();
+	vkDestroyCommandPool(m_ctx.device(), m_transferPoolModelThread, nullptr);
+	vkDestroyCommandPool(m_ctx.device(), m_computePoolModelThread, nullptr);
 
-	vkDestroyPipeline(m_device, m_blitPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_fxaaPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_bloomUpsamplePipeline, nullptr);
-	vkDestroyPipeline(m_device, m_bloomDownsamplePipeline, nullptr);
-	vkDestroyPipeline(m_device, m_uiCompositePipeline, nullptr);
-	vkDestroyPipeline(m_device, m_postprocessingPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_transparencyCompositePipeline, nullptr);
-	vkDestroyPipeline(m_device, m_brdfIntegralPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_radiancePipeline, nullptr);
-	vkDestroyPipeline(m_device, m_irradiancePipeline, nullptr);
-	vkDestroyPipeline(m_device, m_cubeMipPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_cubePipeline, nullptr);
-	vkDestroyPipeline(m_device, m_mipPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_srgbMipPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_skyboxPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_blitPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_fxaaPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_bloomUpsamplePipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_bloomDownsamplePipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_uiCompositePipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_postprocessingPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_transparencyCompositePipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_brdfIntegralPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_radiancePipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_irradiancePipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_cubeMipPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_cubePipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_mipPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_srgbMipPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_skyboxPipeline, nullptr);
 	
-	vkDestroyPipelineLayout(m_device, m_postprocessingPipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_device, m_threeImageSetLayout, nullptr);
+	vkDestroyPipelineLayout(m_ctx.device(), m_postprocessingPipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_ctx.device(), m_threeImageSetLayout, nullptr);
 
-	vkDestroyPipelineLayout(m_device, m_oneTexOneImagePipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_device, m_oneTexOneImageSetLayout, nullptr);
+	vkDestroyPipelineLayout(m_ctx.device(), m_oneTexOneImagePipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_ctx.device(), m_oneTexOneImageSetLayout, nullptr);
 
-	vkDestroyPipelineLayout(m_device, m_bloomPipelineLayout, nullptr);
-	vkDestroyPipelineLayout(m_device, m_twoImagePipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_device, m_twoImageSetLayout, nullptr);
+	vkDestroyPipelineLayout(m_ctx.device(), m_bloomPipelineLayout, nullptr);
+	vkDestroyPipelineLayout(m_ctx.device(), m_twoImagePipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_ctx.device(), m_twoImageSetLayout, nullptr);
 
-	vkDestroyPipelineLayout(m_device, m_transparencyCompositePipelineLayout, nullptr);
-	vkDestroyPipelineLayout(m_device, m_oneImagePipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_device, m_oneImageSetLayout, nullptr);
+	vkDestroyPipelineLayout(m_ctx.device(), m_transparencyCompositePipelineLayout, nullptr);
+	vkDestroyPipelineLayout(m_ctx.device(), m_oneImagePipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_ctx.device(), m_oneImageSetLayout, nullptr);
 
 
-	vkDestroyPipelineLayout(m_device, m_skyboxPipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_device, m_skyboxSetLayout, nullptr);
+	vkDestroyPipelineLayout(m_ctx.device(), m_skyboxPipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_ctx.device(), m_skyboxSetLayout, nullptr);
 
-	vkDestroyPipeline(m_device, m_shadowPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_prepassPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_blendPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_opaquePipeline, nullptr);
-	vkDestroyPipelineLayout(m_device, m_modelPipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_device, m_modelSetLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_device, m_modelPushDescriptorLayout, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_shadowPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_prepassPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_blendPipeline, nullptr);
+	vkDestroyPipeline(m_ctx.device(), m_opaquePipeline, nullptr);
+	vkDestroyPipelineLayout(m_ctx.device(), m_modelPipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_ctx.device(), m_modelSetLayout, nullptr);
+	vkDestroyDescriptorSetLayout(m_ctx.device(), m_modelPushDescriptorLayout, nullptr);
 
-	vkDestroySampler(m_device, m_shadowSampler, nullptr);
-	vkDestroySampler(m_device, m_skyboxSampler, nullptr);
+	vkDestroySampler(m_ctx.device(), m_shadowSampler, nullptr);
+	vkDestroySampler(m_ctx.device(), m_skyboxSampler, nullptr);
 	destroySkybox(m_skybox);
 	destroyModel(m_model);
 
 	for(auto [view, _] : m_bloomMips) {
-		vkDestroyImageView(m_device, view, nullptr);
+		vkDestroyImageView(m_ctx.device(), view, nullptr);
 	}
 
 	destroyImage(m_shadowMap);
@@ -812,21 +691,13 @@ Renderer::~Renderer() {
 	destroyBuffer(m_poissonDiskBuffer);
 	
 	for(VkImageView view : m_swapchainImageViews) {
-		vkDestroyImageView(m_device, view, nullptr);
+		vkDestroyImageView(m_ctx.device(), view, nullptr);
 	}
 
 	for(VkSemaphore sem : m_swapchainSems) {
-		vkDestroySemaphore(m_device, sem, nullptr);
+		vkDestroySemaphore(m_ctx.device(), sem, nullptr);
 	}
 
-	vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-	vkDestroyDevice(m_device, nullptr);
-
-	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-	vkDestroyInstance(m_instance, nullptr);
-
-	NFD_Quit();
-
-	glfwDestroyWindow(m_window);
-	glfwTerminate();
+	vkDestroySwapchainKHR(m_ctx.device(), m_swapchain, nullptr);
+	vkDestroySurfaceKHR(m_ctx.instance(), m_surface, nullptr);
 }

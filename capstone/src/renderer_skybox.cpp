@@ -23,7 +23,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 	vkEndCommandBuffer(m_transferCmdSkyboxThread);
 
 	m_dmaTransferLock.lock();
-	vkQueueSubmit2(m_transferQueue, 1, ptr(VkSubmitInfo2{
+	vkQueueSubmit2(m_ctx.transferQueue(), 1, ptr(VkSubmitInfo2{
 		.commandBufferInfoCount = 1,
 		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmdSkyboxThread }),
 		.signalSemaphoreInfoCount = 1,
@@ -43,21 +43,21 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 	VkImageView environmentMapView;
 	VkImageView irradianceMapView;
 	VkImageView radianceMapView;
-	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+	vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 		.pNext = ptr(VkImageViewUsageCreateInfo{.usage = VK_IMAGE_USAGE_SAMPLED_BIT }),
 		.image = environmentMap.image,
 		.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
 		.format = VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
 		.subresourceRange = colorSubresourceRange()
 	}), nullptr, &environmentMapView);
-	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+	vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 		.pNext = ptr(VkImageViewUsageCreateInfo{.usage = VK_IMAGE_USAGE_SAMPLED_BIT }),
 		.image = irradianceMap.image,
 		.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
 		.format = VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
 		.subresourceRange = colorSubresourceRange()
 	}), nullptr, &irradianceMapView);
-	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+	vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 		.pNext = ptr(VkImageViewUsageCreateInfo{.usage = VK_IMAGE_USAGE_SAMPLED_BIT }),
 		.image = radianceMap.image,
 		.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
@@ -94,7 +94,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 
 	std::vector<VkImageView> mipViews;
 	VkImageView mip0View;
-	vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+	vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 		.image = environmentMap.image,
 		.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
 		.format = VK_FORMAT_R32_UINT,
@@ -107,7 +107,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 		vkCmdBarrier(m_computeCmdSkyboxThread, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 
 		VkImageView curMipView;
-		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 			.image = environmentMap.image,
 			.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
 			.format = VK_FORMAT_R32_UINT,
@@ -179,7 +179,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 
 	for(u8 i = 0; i < cubeMips; i++) {
 		VkImageView curMipView;
-		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 			.image = radianceMap.image,
 			.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
 			.format = VK_FORMAT_R32_UINT,
@@ -203,7 +203,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 	vkEndCommandBuffer(m_computeCmdSkyboxThread);
 
 	m_asyncComputeLock.lock();
-	vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
+	vkQueueSubmit2(m_ctx.computeQueue(), 1, ptr(VkSubmitInfo2{
 		.waitSemaphoreInfoCount = 1,
 		.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
 			.semaphore = m_skyboxSem.semaphore(),
@@ -222,17 +222,17 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 	m_asyncComputeLock.unlock();
 
 	m_skyboxSem.wait();
-	vkResetCommandPool(m_device, m_transferPoolSkyboxThread, 0);
+	vkResetCommandPool(m_ctx.device(), m_transferPoolSkyboxThread, 0);
 	destroyBuffer(stagingBuffer);
 
-	vkResetCommandPool(m_device, m_computePoolSkyboxThread, 0);
+	vkResetCommandPool(m_ctx.device(), m_computePoolSkyboxThread, 0);
 	destroyImage(srcImg);
 
-	vkDestroyImageView(m_device, environmentMap.view, nullptr);
-	vkDestroyImageView(m_device, irradianceMap.view, nullptr);
-	vkDestroyImageView(m_device, radianceMap.view, nullptr);
+	vkDestroyImageView(m_ctx.device(), environmentMap.view, nullptr);
+	vkDestroyImageView(m_ctx.device(), irradianceMap.view, nullptr);
+	vkDestroyImageView(m_ctx.device(), radianceMap.view, nullptr);
 	for(VkImageView view : mipViews) {
-		vkDestroyImageView(m_device, view, nullptr);
+		vkDestroyImageView(m_ctx.device(), view, nullptr);
 	}
 
 	environmentMap.view = environmentMapView;

@@ -120,7 +120,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		}));
 
 		VkImageView mip0View;
-		vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+		vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 			.image = image.image,
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
 			.format = VK_FORMAT_R8G8B8A8_UNORM,
@@ -131,7 +131,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		vkCmdBindPipeline(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, isSrgb[idx] ? m_srgbMipPipeline: m_mipPipeline);
 		for(u8 i = 1; i < numMips; i++) {
 			VkImageView curMipView;
-			vkCreateImageView(m_device, ptr(VkImageViewCreateInfo{
+			vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
 				.image = image.image,
 				.viewType = VK_IMAGE_VIEW_TYPE_2D,
 				.format = VK_FORMAT_R8G8B8A8_UNORM,
@@ -164,7 +164,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 	for(const fastgltf::Sampler& s : asset.samplers) {
 		VkSampler sampler;
-		vkCreateSampler(m_device, ptr(VkSamplerCreateInfo{
+		vkCreateSampler(m_ctx.device(), ptr(VkSamplerCreateInfo{
 			.magFilter = m_filterMap.at(s.magFilter.value_or(fastgltf::Filter::Linear)),
 			.minFilter = m_filterMap.at(s.minFilter.value_or(fastgltf::Filter::Linear)),
 			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
@@ -197,7 +197,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		descriptors.push_back(info);
 	}
 
-	vkCreateDescriptorPool(m_device, ptr(VkDescriptorPoolCreateInfo{
+	vkCreateDescriptorPool(m_ctx.device(), ptr(VkDescriptorPoolCreateInfo{
 		.maxSets = 1,
 		.poolSizeCount = 1,
 		.pPoolSizes = ptr(VkDescriptorPoolSize{
@@ -206,7 +206,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		})
 	}), nullptr, &pool);
 
-	vkAllocateDescriptorSets(m_device, ptr(VkDescriptorSetAllocateInfo{
+	vkAllocateDescriptorSets(m_ctx.device(), ptr(VkDescriptorSetAllocateInfo{
 		.pNext = ptr(VkDescriptorSetVariableDescriptorCountAllocateInfo{
 			.descriptorSetCount = 1,
 			.pDescriptorCounts = ptr<u32>(descriptors.size())
@@ -216,7 +216,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		.pSetLayouts = &m_modelSetLayout
 	}), &set);
 
-	vkUpdateDescriptorSets(m_device, 1, ptr(VkWriteDescriptorSet{
+	vkUpdateDescriptorSets(m_ctx.device(), 1, ptr(VkWriteDescriptorSet{
 		.dstSet = set,
 		.dstBinding = 0,
 		.dstArrayElement = 0,
@@ -381,7 +381,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	vkEndCommandBuffer(m_transferCmdModelThread);
 
 	m_dmaTransferLock.lock();
-	vkQueueSubmit2(m_transferQueue, 1, ptr(VkSubmitInfo2{
+	vkQueueSubmit2(m_ctx.transferQueue(), 1, ptr(VkSubmitInfo2{
 		.commandBufferInfoCount = 1,
 		.pCommandBufferInfos = ptr(VkCommandBufferSubmitInfo{.commandBuffer = m_transferCmdModelThread }),
 		.signalSemaphoreInfoCount = 1,
@@ -394,7 +394,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	m_dmaTransferLock.unlock();
 
 	m_asyncComputeLock.lock();
-	vkQueueSubmit2(m_computeQueue, 1, ptr(VkSubmitInfo2{
+	vkQueueSubmit2(m_ctx.computeQueue(), 1, ptr(VkSubmitInfo2{
 		.waitSemaphoreInfoCount = 1,
 		.pWaitSemaphoreInfos = ptr(VkSemaphoreSubmitInfo{
 			.semaphore = m_modelSem.semaphore(),
@@ -423,13 +423,13 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	destroyBuffer(stagingIndexBuffer);
 	destroyBuffer(stagingIndirectBuffer);
 
-	vkResetCommandPool(m_device, m_transferPoolModelThread, 0);
+	vkResetCommandPool(m_ctx.device(), m_transferPoolModelThread, 0);
 
 	for(VkImageView i : mipViews) {
-		vkDestroyImageView(m_device, i, nullptr);
+		vkDestroyImageView(m_ctx.device(), i, nullptr);
 	}
 
-	vkResetCommandPool(m_device, m_computePoolModelThread, 0);
+	vkResetCommandPool(m_ctx.device(), m_computePoolModelThread, 0);
 
 	return Model{ std::move(images), std::move(samplers), pool, set, materialBuffer, vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, opaqueDrawCmds.size(), blendDrawCmds.size() };
 }
@@ -440,10 +440,10 @@ void Renderer::destroyModel(Model model) {
 	}
 
 	for(VkSampler i : model.samplers) {
-		vkDestroySampler(m_device, i, nullptr);
+		vkDestroySampler(m_ctx.device(), i, nullptr);
 	}
 
-	vkDestroyDescriptorPool(m_device, model.texPool, nullptr);
+	vkDestroyDescriptorPool(m_ctx.device(), model.texPool, nullptr);
 
 	destroyBuffer(model.materialBuffer);
 	destroyBuffer(model.vertexBuffer);

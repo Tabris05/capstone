@@ -34,8 +34,6 @@ class Semaphore {
 	
 		Fence fence() const;
 		VkSemaphore semaphore() const;
-	
-		void destroy();
 
 		Semaphore() = default;
 		Semaphore(VkDevice device);
