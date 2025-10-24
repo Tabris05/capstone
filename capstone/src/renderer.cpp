@@ -407,10 +407,10 @@ void Renderer::render(f32 thisFrame) {
 	glm::mat4 camMatrixNoTranslation = projection * glm::mat4(glm::mat3(view));
 
 	PushConstants pushConstants = {
-		m_oitBuffer.devicePtr,
-		m_model.vertexBuffer.devicePtr,
-		m_model.materialBuffer.devicePtr,
-		m_poissonDiskBuffer.devicePtr,
+		m_oitBuffer.map<void>(),
+		m_model.vertexBuffer.map<void>(),
+		m_model.materialBuffer.map<void>(),
+		m_poissonDiskBuffer.map<void>(),
 		projection * view,
 		lightProjection * lightView,
 		model,
@@ -423,10 +423,7 @@ void Renderer::render(f32 thisFrame) {
 	auto& frameData = m_perFrameData[m_frameIndex];
 	frameData.fence.wait();
 
-	while(!frameData.deletionQueue.empty()) {
-		frameData.deletionQueue.front()();
-		frameData.deletionQueue.pop();
-	}
+	frameData.deletionQueue.clear();
 
 	u32 imageIndex;
 	VkResult result = vkAcquireNextImageKHR(m_ctx.device(), m_swapchain, std::numeric_limits<u64>::max(), frameData.acquireSem, nullptr, &imageIndex);
@@ -444,14 +441,14 @@ void Renderer::render(f32 thisFrame) {
 
 	// shadow pass
 	{
-		vkCmdInitializeDepthImage(frameData.cmdBuffer, m_shadowMap.image);
+		vkCmdInitializeDepthImage(frameData.cmdBuffer, m_shadowMap.image());
 		vkCmdBarrier(frameData.cmdBuffer, PipelineStage::FragmentRead, PipelineStage::DSTarget);
 
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
 			.renderArea = { 0, 0, { static_cast<u32>(m_shadowMapSize), static_cast<u32>(m_shadowMapSize) } },
 			.layerCount = 1,
 			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-				.imageView = m_shadowMap.view,
+				.imageView = m_shadowMap.view(),
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -461,9 +458,9 @@ void Renderer::render(f32 thisFrame) {
 
 		if(m_model.numOpaqueDrawCommands > 0) {
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
-			vkCmdBindIndexBuffer(frameData.cmdBuffer, m_model.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdBindIndexBuffer(frameData.cmdBuffer, m_model.indexBuffer.buffer(), 0, VK_INDEX_TYPE_UINT32);
 			vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
-			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
+			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 		}
 
 		vkCmdEndRendering(frameData.cmdBuffer);
@@ -471,7 +468,7 @@ void Renderer::render(f32 thisFrame) {
 
 	// depth pre-pass
 	{
-		vkCmdInitializeDepthImage(frameData.cmdBuffer, m_depthTarget.image);
+		vkCmdInitializeDepthImage(frameData.cmdBuffer, m_depthTarget.image());
 		vkCmdBarrier(frameData.cmdBuffer, { { PipelineStage::DSTarget, PipelineStage::FragmentRead }, { PipelineStage::DSTarget, PipelineStage::DSTarget } });
 
 		vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_window.width()), static_cast<f32>(m_window.height()), 0.0f, 1.0f }));
@@ -481,7 +478,7 @@ void Renderer::render(f32 thisFrame) {
 			.renderArea = { 0, 0, { m_window.width(), m_window.height() } },
 			.layerCount = 1,
 			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-				.imageView = m_depthTarget.view,
+				.imageView = m_depthTarget.view(),
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -491,7 +488,7 @@ void Renderer::render(f32 thisFrame) {
 
 		if(m_model.numOpaqueDrawCommands > 0) {
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_prepassPipeline);
-			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
+			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 		}
 
 		vkCmdEndRendering(frameData.cmdBuffer);
@@ -499,7 +496,7 @@ void Renderer::render(f32 thisFrame) {
 
 	// opaque color pass
 	{
-		vkCmdInitializeColorImage(frameData.cmdBuffer, m_colorTarget.image);
+		vkCmdInitializeColorImage(frameData.cmdBuffer, m_colorTarget.image());
 		vkCmdBarrier(frameData.cmdBuffer, { { PipelineStage::ComputeRead, PipelineStage::ColorTarget }, { PipelineStage::DSTarget, PipelineStage::DSReadOnly } });
 
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
@@ -507,14 +504,14 @@ void Renderer::render(f32 thisFrame) {
 			.layerCount = 1,
 			.colorAttachmentCount = 1,
 			.pColorAttachments = ptr(VkRenderingAttachmentInfo{
-				.imageView = m_colorTarget.view,
+				.imageView = m_colorTarget.view(),
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 				.clearValue = { 0.0f, 0.0f, 0.0f, 1.0f }
 			}),
 			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-				.imageView = m_depthTarget.view,
+				.imageView = m_depthTarget.view(),
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -530,7 +527,7 @@ void Renderer::render(f32 thisFrame) {
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.pImageInfo = ptr(VkDescriptorImageInfo{
 						.sampler = m_skyboxSampler,
-						.imageView = m_skybox.irradianceMap.view,
+						.imageView = m_skybox.irradianceMap.view(),
 						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 					})
 				},
@@ -540,7 +537,7 @@ void Renderer::render(f32 thisFrame) {
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.pImageInfo = ptr(VkDescriptorImageInfo{
 						.sampler = m_skyboxSampler,
-						.imageView = m_skybox.radianceMap.view,
+						.imageView = m_skybox.radianceMap.view(),
 						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 					})
 				},
@@ -550,7 +547,7 @@ void Renderer::render(f32 thisFrame) {
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.pImageInfo = ptr(VkDescriptorImageInfo{
 						.sampler = m_skyboxSampler,
-						.imageView = m_brdfIntegralTex.view,
+						.imageView = m_brdfIntegralTex.view(),
 						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 					})
 				},
@@ -560,22 +557,22 @@ void Renderer::render(f32 thisFrame) {
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.pImageInfo = ptr(VkDescriptorImageInfo{
 						.sampler = m_shadowSampler,
-						.imageView = m_shadowMap.view,
+						.imageView = m_shadowMap.view(),
 						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 					})
 				}
 			}));
-			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
+			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 		}
 
-		if(m_skybox.environmentMap.image != VkImage{}) {
+		if(m_skybox.environmentMap.image() != VkImage{}) {
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipeline);
 			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.pImageInfo = ptr(VkDescriptorImageInfo{
 					.sampler = m_skyboxSampler,
-					.imageView = m_skybox.environmentMap.view,
+					.imageView = m_skybox.environmentMap.view(),
 					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 				})
 				}));
@@ -591,7 +588,7 @@ void Renderer::render(f32 thisFrame) {
 		if(m_model.numBlendDrawCommands > 0) {
 			vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeRead, PipelineStage::CopyWrite);
 
-			vkCmdFillBuffer(frameData.cmdBuffer, m_oitBuffer.buffer, 0, VK_WHOLE_SIZE, 0);
+			vkCmdFillBuffer(frameData.cmdBuffer, m_oitBuffer.buffer(), 0, VK_WHOLE_SIZE, 0);
 
 			vkCmdBarrier(frameData.cmdBuffer, PipelineStage::CopyWrite, PipelineStage::FragmentRead);
 
@@ -599,7 +596,7 @@ void Renderer::render(f32 thisFrame) {
 				.renderArea = { 0, 0, { m_window.width(), m_window.height() } },
 				.layerCount = 1,
 				.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-					.imageView = m_depthTarget.view,
+					.imageView = m_depthTarget.view(),
 					.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 					.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 					.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -615,7 +612,7 @@ void Renderer::render(f32 thisFrame) {
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.pImageInfo = ptr(VkDescriptorImageInfo{
 						.sampler = m_skyboxSampler,
-						.imageView = m_skybox.irradianceMap.view,
+						.imageView = m_skybox.irradianceMap.view(),
 						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 					})
 				},
@@ -625,7 +622,7 @@ void Renderer::render(f32 thisFrame) {
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.pImageInfo = ptr(VkDescriptorImageInfo{
 						.sampler = m_skyboxSampler,
-						.imageView = m_skybox.radianceMap.view,
+						.imageView = m_skybox.radianceMap.view(),
 						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 					})
 				},
@@ -635,7 +632,7 @@ void Renderer::render(f32 thisFrame) {
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.pImageInfo = ptr(VkDescriptorImageInfo{
 						.sampler = m_skyboxSampler,
-						.imageView = m_brdfIntegralTex.view,
+						.imageView = m_brdfIntegralTex.view(),
 						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 					})
 				},
@@ -645,14 +642,14 @@ void Renderer::render(f32 thisFrame) {
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.pImageInfo = ptr(VkDescriptorImageInfo{
 						.sampler = m_shadowSampler,
-						.imageView = m_shadowMap.view,
+						.imageView = m_shadowMap.view(),
 						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 					})
 				}
 			}));
 			vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
 
-			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer, m_model.numOpaqueDrawCommands * sizeof(VkDrawIndexedIndirectCommand), m_model.numBlendDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
+			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), m_model.numOpaqueDrawCommands * sizeof(VkDrawIndexedIndirectCommand), m_model.numBlendDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 
 			vkCmdEndRendering(frameData.cmdBuffer);
 		}
@@ -660,7 +657,7 @@ void Renderer::render(f32 thisFrame) {
 
 	// ui pass
 	{
-		vkCmdInitializeColorImage(frameData.cmdBuffer, m_uiTarget.image);
+		vkCmdInitializeColorImage(frameData.cmdBuffer, m_uiTarget.image());
 		vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeRead, PipelineStage::ColorTarget);
 
 		vkCmdBeginRendering(frameData.cmdBuffer, ptr(VkRenderingInfo{
@@ -668,7 +665,7 @@ void Renderer::render(f32 thisFrame) {
 			.layerCount = 1,
 			.colorAttachmentCount = 1,
 			.pColorAttachments = ptr(VkRenderingAttachmentInfo{
-				.imageView = m_uiTarget.view,
+				.imageView = m_uiTarget.view(),
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -687,13 +684,13 @@ void Renderer::render(f32 thisFrame) {
 			vkCmdBarrier(frameData.cmdBuffer, { { PipelineStage::FragmentWrite, PipelineStage::ComputeRead }, { PipelineStage::ColorTarget, PipelineStage::Compute } });
 
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_transparencyCompositePipeline);
-			vkCmdPushConstants(frameData.cmdBuffer, m_transparencyCompositePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VkDeviceAddress), &m_oitBuffer.devicePtr);
+			vkCmdPushConstants(frameData.cmdBuffer, m_transparencyCompositePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VkDeviceAddress), ptr(m_oitBuffer.map<void>()));
 			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_transparencyCompositePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 				.pImageInfo = ptr({
 					VkDescriptorImageInfo{
-						.imageView = m_colorTarget.view,
+						.imageView = m_colorTarget.view(),
 						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 					}
 				})
@@ -706,13 +703,13 @@ void Renderer::render(f32 thisFrame) {
 
 	// bloom pass
 	{
-		vkCmdInitializeColorImage(frameData.cmdBuffer, m_bloomTarget.image);
+		vkCmdInitializeColorImage(frameData.cmdBuffer, m_bloomTarget.image());
 		vkCmdBarrier(frameData.cmdBuffer, { { PipelineStage::ComputeRead, PipelineStage::CopyWrite }, { PipelineStage::ColorTarget, PipelineStage::CopyRead } });
 
 		vkCmdCopyImage2(frameData.cmdBuffer, ptr(VkCopyImageInfo2{
-			.srcImage = m_colorTarget.image,
+			.srcImage = m_colorTarget.image(),
 			.srcImageLayout = VK_IMAGE_LAYOUT_GENERAL,
-			.dstImage = m_bloomTarget.image,
+			.dstImage = m_bloomTarget.image(),
 			.dstImageLayout = VK_IMAGE_LAYOUT_GENERAL,
 			.regionCount = 1,
 			.pRegions = ptr(VkImageCopy2{
@@ -797,7 +794,7 @@ void Renderer::render(f32 thisFrame) {
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.pImageInfo = ptr({
 				VkDescriptorImageInfo{
-					.imageView = m_colorTarget.view,
+					.imageView = m_colorTarget.view(),
 					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 				},
 				VkDescriptorImageInfo{
@@ -824,7 +821,7 @@ void Renderer::render(f32 thisFrame) {
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.pImageInfo = ptr(VkDescriptorImageInfo{
 					.sampler = m_skyboxSampler,
-					.imageView = m_colorTarget.view,
+					.imageView = m_colorTarget.view(),
 					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 				}),
 			},
@@ -857,7 +854,7 @@ void Renderer::render(f32 thisFrame) {
 					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 				},
 				VkDescriptorImageInfo{
-					.imageView = m_uiTarget.view,
+					.imageView = m_uiTarget.view(),
 					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 				}
 			})
@@ -908,18 +905,22 @@ void Renderer::render(f32 thisFrame) {
 	if(m_loadingModel && m_modelFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 		m_loadingModel = false;
 		Model tmp = m_modelFuture.get();
-		if(tmp.vertexBuffer.buffer != VkBuffer{}) {
+		if(tmp.vertexBuffer.buffer() != VkBuffer{}) {
 			std::swap(tmp, m_model);
-			frameData.deletionQueue.push([this, tmp] { destroyModel(tmp); });
+
+			// disgusting: std::any can only take copy-constructible types so we have to wrap these objects in shared ptrs
+			frameData.deletionQueue.emplace_back(std::make_shared<Model>(std::move(tmp)));
 		}
 	}
 
 	if(m_loadingSkybox && m_skyboxFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 		m_loadingSkybox = false;
 		Skybox tmp = m_skyboxFuture.get();
-		if(tmp.environmentMap.image != VkImage{}) {
+		if(tmp.environmentMap.image() != VkImage{}) {
 			std::swap(tmp, m_skybox);
-			frameData.deletionQueue.push([this, tmp] { destroySkybox(tmp); });
+
+			// disgusting: see previous
+			frameData.deletionQueue.emplace_back(std::make_shared<Skybox>(std::move(tmp)));
 		}
 	}
 

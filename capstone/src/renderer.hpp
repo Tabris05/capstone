@@ -12,6 +12,7 @@
 #include <imgui/imgui.h>
 #include <future>
 #include <queue>
+#include <any>
 #include "semaphore.hpp"
 #include "context.hpp"
 #include "window.hpp"
@@ -64,22 +65,8 @@ class Renderer {
 			glm::vec3 max{ -std::numeric_limits<f32>::infinity() };
 		};
 
-		struct Image {
-			VkDeviceMemory memory = {};
-			VkImage image = {};
-			VkImageView view = {};
-		};
-
-		struct Buffer {
-			VkDeviceMemory memory = {};
-			VkBuffer buffer = {};
-			union {
-				void* hostPtr = nullptr;
-				VkDeviceAddress devicePtr;
-			};
-		};
-
 		struct Model {
+			VkDevice device = {};
 			std::vector<Image> images;
 			std::vector<VkSampler> samplers;
 			VkDescriptorPool texPool = {};
@@ -92,19 +79,53 @@ class Renderer {
 			AABB aabb;
 			u64 numOpaqueDrawCommands = 0;
 			u64 numBlendDrawCommands = 0;
+
+			Model() = default;
+
+			Model(Model&& src) {
+				memcpy(this, &src, sizeof(Model));
+				memset(&src, 0, sizeof(Model));
+			}
+
+			Model& operator=(Model&& src) {
+				this->~Model();
+				new (this) Model(std::move(src)); return *this;
+			};
+
+			~Model() {
+				if(device) {
+					for(VkSampler i : samplers) {
+						vkDestroySampler(device, i, nullptr);
+					}
+
+					vkDestroyDescriptorPool(device, texPool, nullptr);
+				}
+			}
 		};
 
 		struct Skybox {
 			Image environmentMap;
 			Image irradianceMap;
 			Image radianceMap;
+
+			Skybox() = default;
+
+			Skybox(Skybox&& src) {
+				memcpy(this, &src, sizeof(Skybox));
+				memset(&src, 0, sizeof(Skybox));
+			}
+
+			Skybox& operator=(Skybox&& src) {
+				this->~Skybox();
+				new (this) Skybox(std::move(src)); return *this;
+			};
 		};
 
 		struct PushConstants {
-			VkDeviceAddress oitBuffer;
-			VkDeviceAddress vertexBuffer;
-			VkDeviceAddress materialBuffer;
-			VkDeviceAddress poissonDiskBuffer;
+			void* oitBuffer;
+			void* vertexBuffer;
+			void* materialBuffer;
+			void* poissonDiskBuffer;
 			glm::mat4 cameraTransform;
 			glm::mat4 lightTransform;
 			glm::mat4x3 modelTransform;
@@ -119,7 +140,7 @@ class Renderer {
 			VkCommandBuffer cmdBuffer;
 			VkSemaphore acquireSem;
 			Fence fence;
-			std::queue<std::function<void(void)>> deletionQueue;
+			std::vector<std::any> deletionQueue;
 		} m_perFrameData[m_framesInFlight];
 
 		Window m_window;
@@ -260,17 +281,9 @@ class Renderer {
 		void createSwapchain();
 		void recreateSwapchain();
 
-		Image createImage(u32 width, u32 height, VkFormat format, VkImageUsageFlags usage, u32 mips = 1, b8 cube = false);
-		void destroyImage(Image image);
-
-		Buffer createBuffer(u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps);
-		void destroyBuffer(Buffer buffer);
-
 		Model createModel(std::filesystem::path path);
-		void destroyModel(Model model);
 
 		Skybox createSkybox(std::filesystem::path path);
-		void destroySkybox(Skybox skybox);
 
 		VkPipeline createComputePipeline(VkPipelineLayout layout, std::initializer_list<u32> cs);
 		VkPipeline createGraphicsPipeline(VkPipelineLayout layout, std::initializer_list<u32> vs, std::initializer_list<u32> fs, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment);

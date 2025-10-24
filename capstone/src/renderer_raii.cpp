@@ -310,7 +310,7 @@ Renderer::Renderer(const char* path) {
 
 	// generate brdf integral tex
 	{
-		m_brdfIntegralTex = createImage(m_brdfIntegralLUTSize, m_brdfIntegralLUTSize, VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+		m_brdfIntegralTex = m_ctx.createImage(m_brdfIntegralLUTSize, m_brdfIntegralLUTSize, VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
 		vkBeginCommandBuffer(m_computeCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 		
@@ -320,7 +320,7 @@ Renderer::Renderer(const char* path) {
 				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
 				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.image = m_brdfIntegralTex.image,
+				.image = m_brdfIntegralTex.image(),
 				.subresourceRange = colorSubresourceRange()
 			})
 		}));
@@ -331,7 +331,7 @@ Renderer::Renderer(const char* path) {
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.pImageInfo = ptr(VkDescriptorImageInfo{
-				.imageView = m_brdfIntegralTex.view,
+				.imageView = m_brdfIntegralTex.view(),
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 			})
 		}));
@@ -351,7 +351,7 @@ Renderer::Renderer(const char* path) {
 
 	// Allocate Shadow Map
 	{
-		m_shadowMap = createImage(m_shadowMapSize, m_shadowMapSize, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+		m_shadowMap = m_ctx.createImage(m_shadowMapSize, m_shadowMapSize, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 		
 		u32 poissonDiskBufferSize = m_poissonDiskWindowSize * m_poissonDiskWindowSize * m_poissonDiskFilterSize * m_poissonDiskFilterSize * sizeof(glm::vec2);
 
@@ -373,12 +373,12 @@ Renderer::Renderer(const char* path) {
 			}
 		}
 
-		Buffer poissonDiskStagingBuffer = createBuffer(poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-		m_poissonDiskBuffer = createBuffer(poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		memcpy(poissonDiskStagingBuffer.hostPtr, samples.data(), poissonDiskBufferSize);
+		Buffer poissonDiskStagingBuffer = m_ctx.createBuffer(poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		m_poissonDiskBuffer = m_ctx.createBuffer(poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		memcpy(poissonDiskStagingBuffer.map<void>(), samples.data(), poissonDiskBufferSize);
 
 		vkBeginCommandBuffer(m_transferCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
-		vkCmdCopyBuffer(m_transferCmdModelThread, poissonDiskStagingBuffer.buffer, m_poissonDiskBuffer.buffer, 1, ptr(VkBufferCopy{ .size = poissonDiskBufferSize }));
+		vkCmdCopyBuffer(m_transferCmdModelThread, poissonDiskStagingBuffer.buffer(), m_poissonDiskBuffer.buffer(), 1, ptr(VkBufferCopy{ .size = poissonDiskBufferSize }));
 		vkEndCommandBuffer(m_transferCmdModelThread);
 
 		vkQueueSubmit2(m_ctx.transferQueue(), 1, ptr(VkSubmitInfo2{
@@ -388,8 +388,6 @@ Renderer::Renderer(const char* path) {
 
 		vkQueueWaitIdle(m_ctx.transferQueue());
 		vkResetCommandPool(m_ctx.device(), m_transferPoolModelThread, 0);
-		
-		destroyBuffer(poissonDiskStagingBuffer);
 	}
 
 	// Color Pass Pipelines
@@ -674,21 +672,10 @@ Renderer::~Renderer() {
 
 	vkDestroySampler(m_ctx.device(), m_shadowSampler, nullptr);
 	vkDestroySampler(m_ctx.device(), m_skyboxSampler, nullptr);
-	destroySkybox(m_skybox);
-	destroyModel(m_model);
 
 	for(auto [view, _] : m_bloomMips) {
 		vkDestroyImageView(m_ctx.device(), view, nullptr);
 	}
-
-	destroyImage(m_shadowMap);
-	destroyImage(m_brdfIntegralTex);
-	destroyImage(m_colorTarget);
-	destroyImage(m_bloomTarget);
-	destroyImage(m_depthTarget);
-	destroyImage(m_uiTarget);
-	destroyBuffer(m_oitBuffer);
-	destroyBuffer(m_poissonDiskBuffer);
 	
 	for(VkImageView view : m_swapchainImageViews) {
 		vkDestroyImageView(m_ctx.device(), view, nullptr);

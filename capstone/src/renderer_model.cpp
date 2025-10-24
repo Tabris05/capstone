@@ -83,12 +83,12 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	}
 
 	const u64 materialBufferByteSize = materials.size() * sizeof(Material);
-	Buffer stagingMaterialBuffer = createBuffer(materialBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	Buffer materialBuffer = createBuffer(materialBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	Buffer stagingMaterialBuffer = m_ctx.createBuffer(materialBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer materialBuffer = m_ctx.createBuffer(materialBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	
-	memcpy(stagingMaterialBuffer.hostPtr, materials.data(), materialBufferByteSize);
+	memcpy(stagingMaterialBuffer.map<void>(), materials.data(), materialBufferByteSize);
 
-	vkCmdCopyBuffer(m_transferCmdModelThread, stagingMaterialBuffer.buffer, materialBuffer.buffer, 1, ptr(VkBufferCopy{ .size = materialBufferByteSize }));
+	vkCmdCopyBuffer(m_transferCmdModelThread, stagingMaterialBuffer.buffer(), materialBuffer.buffer(), 1, ptr(VkBufferCopy{ .size = materialBufferByteSize }));
 
 	for(const auto& [idx, img] : std::views::enumerate(asset.images)) {
 		i32 width;
@@ -98,19 +98,17 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 		u8 numMips = std::floor(std::log2(std::max(width, height))) + 1;
 
-		Buffer stagingBuffer = createBuffer(width * height * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-		imageStagingBuffers.push_back(stagingBuffer);
-		memcpy(stagingBuffer.hostPtr, pixels, width * height * 4);
+		Buffer stagingBuffer = m_ctx.createBuffer(width * height * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		memcpy(stagingBuffer.map<void>(), pixels, width * height * 4);
 		stbi_image_free(pixels);
 
-		Image image = createImage(width, height, isSrgb[idx] ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, numMips);
-		images.push_back(image);
+		Image image = m_ctx.createImage(width, height, isSrgb[idx] ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, numMips);
 
-		vkCmdInitializeColorImage(m_transferCmdModelThread, image.image);
+		vkCmdInitializeColorImage(m_transferCmdModelThread, image.image());
 
 		vkCmdCopyBufferToImage2(m_transferCmdModelThread, ptr(VkCopyBufferToImageInfo2{
-			.srcBuffer = stagingBuffer.buffer,
-			.dstImage = image.image,
+			.srcBuffer = stagingBuffer.buffer(),
+			.dstImage = image.image(),
 			.dstImageLayout = VK_IMAGE_LAYOUT_GENERAL,
 			.regionCount = 1,
 			.pRegions = ptr(VkBufferImageCopy2{
@@ -121,7 +119,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 		VkImageView mip0View;
 		vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
-			.image = image.image,
+			.image = image.image(),
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
 			.format = VK_FORMAT_R8G8B8A8_UNORM,
 			.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
@@ -132,7 +130,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		for(u8 i = 1; i < numMips; i++) {
 			VkImageView curMipView;
 			vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
-				.image = image.image,
+				.image = image.image(),
 				.viewType = VK_IMAGE_VIEW_TYPE_2D,
 				.format = VK_FORMAT_R8G8B8A8_UNORM,
 				.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 }
@@ -158,6 +156,9 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 			vkCmdBarrier(m_computeCmdModelThread, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 		}
+
+		images.push_back(std::move(image));
+		imageStagingBuffers.push_back(std::move(stagingBuffer));
 	}
 
 	vkEndCommandBuffer(m_computeCmdModelThread);
@@ -180,7 +181,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	for(const fastgltf::Texture tex : asset.textures) {
 		VkDescriptorImageInfo info = {
 			.sampler = samplers[tex.samplerIndex.value()],
-			.imageView = images[tex.imageIndex.value()].view,
+			.imageView = images[tex.imageIndex.value()].view(),
 			.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 		};
 
@@ -363,21 +364,21 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	const u64 opaqueIndirectBufferByteSize = opaqueDrawCmds.size() * sizeof(VkDrawIndexedIndirectCommand);
 	const u64 blendIndirectBufferByteSize = blendDrawCmds.size() * sizeof(VkDrawIndexedIndirectCommand);
 	const u64 indirectBufferByteSize = opaqueIndirectBufferByteSize + blendIndirectBufferByteSize;
-	Buffer stagingVertexBuffer = createBuffer(vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	Buffer stagingIndexBuffer = createBuffer(indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	Buffer stagingIndirectBuffer = createBuffer(indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	Buffer vertexBuffer = createBuffer(vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	Buffer indexBuffer = createBuffer(indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	Buffer indirectBuffer = createBuffer(indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	Buffer stagingVertexBuffer = m_ctx.createBuffer(vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer stagingIndexBuffer = m_ctx.createBuffer(indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer stagingIndirectBuffer = m_ctx.createBuffer(indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer vertexBuffer = m_ctx.createBuffer(vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	Buffer indexBuffer = m_ctx.createBuffer(indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	Buffer indirectBuffer = m_ctx.createBuffer(indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	memcpy(stagingVertexBuffer.hostPtr, vertices.data(), vertexBufferByteSize);
-	memcpy(stagingIndexBuffer.hostPtr, indices.data(), indexBufferByteSize);
-	memcpy(stagingIndirectBuffer.hostPtr, opaqueDrawCmds.data(), opaqueIndirectBufferByteSize);
-	memcpy(reinterpret_cast<char*>(stagingIndirectBuffer.hostPtr) + opaqueIndirectBufferByteSize, blendDrawCmds.data(), blendIndirectBufferByteSize);
+	memcpy(stagingVertexBuffer.map<void>(), vertices.data(), vertexBufferByteSize);
+	memcpy(stagingIndexBuffer.map<void>(), indices.data(), indexBufferByteSize);
+	memcpy(stagingIndirectBuffer.map<void>(), opaqueDrawCmds.data(), opaqueIndirectBufferByteSize);
+	memcpy(reinterpret_cast<char*>(stagingIndirectBuffer.map<void>()) + opaqueIndirectBufferByteSize, blendDrawCmds.data(), blendIndirectBufferByteSize);
 	
-	vkCmdCopyBuffer(m_transferCmdModelThread, stagingVertexBuffer.buffer, vertexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = vertexBufferByteSize }));
-	vkCmdCopyBuffer(m_transferCmdModelThread, stagingIndexBuffer.buffer, indexBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indexBufferByteSize }));
-	vkCmdCopyBuffer(m_transferCmdModelThread, stagingIndirectBuffer.buffer, indirectBuffer.buffer, 1, ptr(VkBufferCopy{ .size = indirectBufferByteSize }));
+	vkCmdCopyBuffer(m_transferCmdModelThread, stagingVertexBuffer.buffer(), vertexBuffer.buffer(), 1, ptr(VkBufferCopy{ .size = vertexBufferByteSize }));
+	vkCmdCopyBuffer(m_transferCmdModelThread, stagingIndexBuffer.buffer(), indexBuffer.buffer(), 1, ptr(VkBufferCopy{ .size = indexBufferByteSize }));
+	vkCmdCopyBuffer(m_transferCmdModelThread, stagingIndirectBuffer.buffer(), indirectBuffer.buffer(), 1, ptr(VkBufferCopy{ .size = indirectBufferByteSize }));
 	vkEndCommandBuffer(m_transferCmdModelThread);
 
 	m_dmaTransferLock.lock();
@@ -414,15 +415,6 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 	m_modelSem.wait();
 
-	for(Buffer i : imageStagingBuffers) {
-		destroyBuffer(i);
-	}
-
-	destroyBuffer(stagingMaterialBuffer);
-	destroyBuffer(stagingVertexBuffer);
-	destroyBuffer(stagingIndexBuffer);
-	destroyBuffer(stagingIndirectBuffer);
-
 	vkResetCommandPool(m_ctx.device(), m_transferPoolModelThread, 0);
 
 	for(VkImageView i : mipViews) {
@@ -431,22 +423,20 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 	vkResetCommandPool(m_ctx.device(), m_computePoolModelThread, 0);
 
-	return Model{ std::move(images), std::move(samplers), pool, set, materialBuffer, vertexBuffer, indexBuffer, indirectBuffer, baseTransform, aabb, opaqueDrawCmds.size(), blendDrawCmds.size() };
-}
+	Model model;
+	model.device = m_ctx.device();
+	model.images = std::move(images);
+	model.samplers = std::move(samplers);
+	model.texPool = pool;
+	model.texSet = set;
+	model.materialBuffer = std::move(materialBuffer);
+	model.vertexBuffer = std::move(vertexBuffer);
+	model.indexBuffer = std::move(indexBuffer);
+	model.indirectBuffer = std::move(indirectBuffer);
+	model.baseTransform = baseTransform;
+	model.aabb = aabb;
+	model.numOpaqueDrawCommands = opaqueDrawCmds.size();
+	model.numBlendDrawCommands = blendDrawCmds.size();
 
-void Renderer::destroyModel(Model model) {
-	for(Image i : model.images) {
-		destroyImage(i);
-	}
-
-	for(VkSampler i : model.samplers) {
-		vkDestroySampler(m_ctx.device(), i, nullptr);
-	}
-
-	vkDestroyDescriptorPool(m_ctx.device(), model.texPool, nullptr);
-
-	destroyBuffer(model.materialBuffer);
-	destroyBuffer(model.vertexBuffer);
-	destroyBuffer(model.indexBuffer);
-	destroyBuffer(model.indirectBuffer);
+	return model;
 }

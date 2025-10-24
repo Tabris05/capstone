@@ -167,7 +167,9 @@
     <ClCompile Include="include\nfd\nfd_win.cpp" />
     <ClCompile Include="include\stb\stb_image.c" />
     <ClCompile Include="include\volk\volk.cpp" />
+    <ClCompile Include="src\buffer.cpp" />
     <ClCompile Include="src\context.cpp" />
+    <ClCompile Include="src\image.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\renderer.cpp" />
     <ClCompile Include="src\renderer_model.cpp" />
@@ -182,7 +184,9 @@
     <ClInclude Include="..\shared\oitnode.h" />
     <ClInclude Include="..\shared\vertex.h" />
     <ClInclude Include="include\resources\roboto_regular.h" />
+    <ClInclude Include="src\buffer.hpp" />
     <ClInclude Include="src\context.hpp" />
+    <ClInclude Include="src\image.hpp" />
     <ClInclude Include="src\renderer.hpp" />
     <ClInclude Include="src\semaphore.hpp" />
     <ClInclude Include="src\window.hpp" />
