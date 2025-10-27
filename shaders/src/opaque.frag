@@ -3,8 +3,8 @@
 #include "extensions.glsl"
 #include "utils.glsl"
 
-layout(location = 0) in vec4 inPositionLight;
-layout(location = 1) in vec3 inPosition;
+layout(location = 0) in vec3 inPosition;
+layout(location = 1) in vec3 inPositionLight;
 layout(location = 2) in vec3 inNormal;
 layout(location = 3) in vec3 inTangent;
 layout(location = 4) in vec3 inBitangent;
@@ -20,7 +20,7 @@ void main() {
     Material mat = pcs.materialBuffer.materials[inMaterialIndex];
 
     PBRMaterial pbr = getPBRMaterial(mat, inUV);
-    vec3 outputColor = directionalLight(view, pcs.lightAngle, inPositionLight.xyz / inPositionLight.w, pcs.lightColor.rgb * pcs.lightColor.a, pbr) + ambientLight(view, pbr) + pbr.emission;
+    vec3 outputColor = directionalLight(view, pcs.lightAngle, inPositionLight, pcs.lightColor.rgb * pcs.lightColor.a, pbr) + ambientLight(view, pbr) + pbr.emission;
 
     fragColor = vec4(outputColor, 1.0f);
 }

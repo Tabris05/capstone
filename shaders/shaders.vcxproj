@@ -127,6 +127,7 @@
     <ClInclude Include="src\utils.glsl" />
     <ClInclude Include="src\pbr.glsl" />
     <ClInclude Include="src\extensions.glsl" />
+	<ClInclude Include="src\texture_heap.glsl" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\blend.frag" />

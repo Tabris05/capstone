@@ -4,10 +4,12 @@
 #ifdef __cplusplus
     #include <glm/glm.hpp>
     #include <tbrs/types.hpp>
+    #include "../capstone/src/image_handle.hpp"
     #define GLM glm::
 #else
     #define GLM
     #include "../shaders/src/types.glsl"
+    #define ImageHandle u32
 #endif
 
 #define HAS_ALBEDO 0x01
@@ -21,11 +23,11 @@ struct Material {
     GLM vec4 emissiveColor;
     f32 metallic;
     f32 roughness;
-    u32 albedoIndex;
-    u32 normalIndex;
-    u32 occlusionIndex;
-    u32 metallicRoughnessIndex;
-    u32 emissiveIndex;
+    ImageHandle albedoIndex;
+    ImageHandle normalIndex;
+    ImageHandle occlusionIndex;
+    ImageHandle metallicRoughnessIndex;
+    ImageHandle emissiveIndex;
     u32 texBitfield;
 };
 

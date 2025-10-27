@@ -2,6 +2,7 @@
 #define BUFFER_H
 
 #include <volk/volk.h>
+#include "context.hpp"
 
 class Buffer {
 public:
@@ -13,7 +14,7 @@ public:
 	}
 
 	Buffer() = default;
-	Buffer(VkDevice device, VkDeviceMemory mem, VkBuffer buffer, void* ptr);
+	Buffer(VulkanContext& ctx, u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps);
 	~Buffer();
 
 	Buffer(const Buffer&) = delete;

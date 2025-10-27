@@ -169,6 +169,7 @@
     <ClCompile Include="include\volk\volk.cpp" />
     <ClCompile Include="src\buffer.cpp" />
     <ClCompile Include="src\context.cpp" />
+    <ClCompile Include="src\descriptor_heap.cpp" />
     <ClCompile Include="src\image.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\renderer.cpp" />
@@ -186,7 +187,9 @@
     <ClInclude Include="include\resources\roboto_regular.h" />
     <ClInclude Include="src\buffer.hpp" />
     <ClInclude Include="src\context.hpp" />
+    <ClInclude Include="src\descriptor_heap.hpp" />
     <ClInclude Include="src\image.hpp" />
+    <ClInclude Include="src\image_handle.hpp" />
     <ClInclude Include="src\renderer.hpp" />
     <ClInclude Include="src\semaphore.hpp" />
     <ClInclude Include="src\window.hpp" />

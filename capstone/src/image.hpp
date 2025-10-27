@@ -4,15 +4,15 @@
 #include <volk/volk.h>
 #include <tbrs/types.hpp>
 #include <utility>
+#include "context.hpp"
 
 class Image {
 public:
 	VkImage image();
-	VkImageView view();
-	void replaceView(VkImageView newView);
+	VkImageViewCreateInfo viewCI();
 
 	Image() = default;
-	Image(VkDevice device, VkDeviceMemory mem, VkImage image, VkImageView view);
+	Image(VulkanContext& ctx, u32 width, u32 height, VkFormat format, VkImageUsageFlags usage, u32 mips = 1, b8 cube = false);
 	~Image();
 
 	Image(const Image&) = delete;
@@ -24,7 +24,8 @@ private:
 	VkDevice m_device = {};
 	VkDeviceMemory m_mem = {};
 	VkImage m_image = {};
-	VkImageView m_view = {};
+	VkImageViewCreateInfo m_viewCI;
+	VkImageViewUsageCreateInfo m_viewUsageCI;
 };
 
 #endif

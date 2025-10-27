@@ -1,9 +1,13 @@
 #version 460
 
 #include "extensions.glsl"
+#include "texture_heap.glsl"
+#include "types.glsl"
 
-layout(rgba8, binding = 0) uniform restrict readonly image2D lowerMip;
-layout(rgba8, binding = 1) uniform restrict writeonly image2D higherMip;
+layout(push_constant, scalar) uniform constants {
+    u32 lowerMip;
+    u32 higherMip;
+} pcs;
 
 vec4 srgbToLinear(vec4 color) {
     return vec4(mix(color.rgb / 12.92f, pow((color.rgb + 0.055f) / 1.055f, vec3(2.4f)), greaterThan(color.rgb, vec3(0.04045f))), color.a);
@@ -17,10 +21,10 @@ layout(local_size_x = 8, local_size_y = 8) in;
 void main() {
     vec4 pixel = vec4(0.0f);
 
-    pixel += srgbToLinear(imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(0, 0))));
-    pixel += srgbToLinear(imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(0, 1))));
-    pixel += srgbToLinear(imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(1, 0))));
-    pixel += srgbToLinear(imageLoad(lowerMip, ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(1, 1))));
+    pixel += srgbToLinear(imageLoad(UNPACK_IMG_2D(pcs.lowerMip), ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(0, 0))));
+    pixel += srgbToLinear(imageLoad(UNPACK_IMG_2D(pcs.lowerMip), ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(0, 1))));
+    pixel += srgbToLinear(imageLoad(UNPACK_IMG_2D(pcs.lowerMip), ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(1, 0))));
+    pixel += srgbToLinear(imageLoad(UNPACK_IMG_2D(pcs.lowerMip), ivec2(gl_GlobalInvocationID.xy * 2 + uvec2(1, 1))));
 
-    imageStore(higherMip, ivec2(gl_GlobalInvocationID.xy), linearToSrgb(pixel / 4.0f));
+    imageStore(UNPACK_IMG_2D(pcs.higherMip), ivec2(gl_GlobalInvocationID.xy), linearToSrgb(pixel / 4.0f));
 }

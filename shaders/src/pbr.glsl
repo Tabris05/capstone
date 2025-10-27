@@ -2,6 +2,8 @@
 #define PBR_GLSL
 
 #include "utils.glsl"
+#include "extensions.glsl"
+#include "texture_heap.glsl"
 #include "shared/material.h"
 #include "shared/oitnode.h"
 #include "shared/vertex.h"
@@ -22,12 +24,6 @@ struct PBRMaterial {
     f32 metallic;
     f32 roughness;
 };
-
-layout(set = 0, binding = 0) uniform sampler2D imageHeap[];
-layout(set = 1, binding = 0) uniform samplerCube irradianceMap;
-layout(set = 1, binding = 1) uniform samplerCube radianceMap;
-layout(set = 1, binding = 2) uniform sampler2D brdfIntegralTex;
-layout(set = 1, binding = 3) uniform sampler2DShadow shadowMapTex;
 
 layout(buffer_reference, scalar) restrict coherent buffer OITBuffer {
     OITNode nodes[];
@@ -51,12 +47,16 @@ layout(push_constant, scalar) uniform constants {
     MaterialBuffer materialBuffer;
     PoissonDiskBuffer poissonDiskBuffer;
     mat4 cameraTransform;
-    mat4 lightTransform;
     mat4x3 modelTransform;
     vec4 lightColor;
     vec3 cameraPosition;
     vec3 lightAngle;
+    f32 orthoSize;
     u32 frameBufferWidth;
+    u32 irradianceMapIdx;
+    u32 radianceMapIdx;
+    u32 brdfIntegralTexIdx;
+    u32 shadowMapTexIdx;
 } pcs;
 
 f32 isotrophicNDFFilter(vec3 normal, f32 alpha) {
@@ -107,7 +107,7 @@ f32 inShadow(vec3 lightspacePos, vec3 normal) {
 		    u32 idx = indexOffset.z + WINDOWSIZE * (indexOffset.y + WINDOWSIZE * indexOffset.x);
 		    vec3 offset = vec3(pcs.poissonDiskBuffer.samples[idx] * SAMPLERADIUS, bias);
 
-		    cur += texture(shadowMapTex, lightspacePos + offset);
+		    cur += texture(UNPACK_TEX_SHADOW(pcs.shadowMapTexIdx), lightspacePos + offset);
 	    }
 
 	    if(cur == 0.0f || cur == 1.0f) {
@@ -142,11 +142,15 @@ vec3 directionalLight(vec3 view, vec3 light, vec3 lightspacePos, vec3 lightColor
 
 
 vec3 ambientLight(vec3 view, PBRMaterial mat) {
-	vec3 fresnel = fresnelSchlickRoughness(clampedDot(mat.normal, view), mix(vec3(0.04f), mat.albedo.rgb, mat.metallic), mat.roughness);
-	vec3 radiance = textureLod(radianceMap, reflect(-view, mat.normal), mat.roughness * (countMips(textureSize(radianceMap, 0)) - 1.0f)).rgb;
-	vec2 brdf = textureLod(brdfIntegralTex, vec2(clampedDot(mat.normal, view), mat.roughness), 0.0f).rg;
+    if((pcs.irradianceMapIdx & ((1 << 20) - 1)) == ((1 << 20) - 1) || (pcs.radianceMapIdx & ((1 << 20) - 1)) == ((1 << 20) - 1)) {
+        return vec3(0.0f);
+    }
 
-	vec3 diffuse = (1.0f - fresnel) * (1.0f - mat.metallic) * mat.albedo.rgb * textureLod(irradianceMap, mat.normal, 0.0f).rgb;
+	vec3 fresnel = fresnelSchlickRoughness(clampedDot(mat.normal, view), mix(vec3(0.04f), mat.albedo.rgb, mat.metallic), mat.roughness);
+	vec3 radiance = textureLod(UNPACK_TEX_CUBE(pcs.radianceMapIdx), reflect(-view, mat.normal), mat.roughness * (countMips(textureSize(UNPACK_TEX_CUBE(pcs.radianceMapIdx), 0)) - 1.0f)).rgb;
+	vec2 brdf = textureLod(UNPACK_TEX_2D(pcs.brdfIntegralTexIdx), vec2(clampedDot(mat.normal, view), mat.roughness), 0.0f).rg;
+
+	vec3 diffuse = (1.0f - fresnel) * (1.0f - mat.metallic) * mat.albedo.rgb * textureLod(UNPACK_TEX_CUBE(pcs.irradianceMapIdx), mat.normal, 0.0f).rgb;
 	vec3 specular = radiance * (fresnel * brdf.x + brdf.y);
 
 	return (diffuse + specular) * mat.occlusion;
@@ -156,30 +160,30 @@ PBRMaterial getPBRMaterial(Material mat, vec2 inUV) {
     PBRMaterial result;
     result.albedo = mat.baseColor;
     if(bitmaskGet(mat.texBitfield, HAS_ALBEDO)) {
-        result.albedo *= texture(nonuniformEXT(imageHeap[mat.albedoIndex]), inUV);
+        result.albedo *= texture(UNPACK_TEX_2D(mat.albedoIndex), inUV);
     }
 
     result.emission = mat.emissiveColor.rgb * mat.emissiveColor.a;
     if(bitmaskGet(mat.texBitfield, HAS_EMISSIVE)) {
-        result.emission *= texture(nonuniformEXT(imageHeap[mat.emissiveIndex]), inUV).rgb;
+        result.emission *= texture(UNPACK_TEX_2D(mat.emissiveIndex), inUV).rgb;
     }
 
     result.geometricNormal = normalize(inNormal);
     result.normal = result.geometricNormal;
     if(bitmaskGet(mat.texBitfield, HAS_NORMAL)) {
-        result.normal = normalize(mat3(normalize(inTangent), normalize(inBitangent), result.normal) * (texture(nonuniformEXT(imageHeap[mat.normalIndex]), inUV).rgb * 2.0f - 1.0f));
+        result.normal = normalize(mat3(normalize(inTangent), normalize(inBitangent), result.normal) * (texture(UNPACK_TEX_2D(mat.normalIndex), inUV).rgb * 2.0f - 1.0f));
     }
     
     result.occlusion = 1.0f;
     if(bitmaskGet(mat.texBitfield, HAS_OCCLUSION)) {
-        result.occlusion *= texture(nonuniformEXT(imageHeap[mat.occlusionIndex]), inUV).r;
+        result.occlusion *= texture(UNPACK_TEX_2D(mat.occlusionIndex), inUV).r;
     }
 
     result.metallic = mat.metallic;
     result.roughness = mat.roughness;
     if(bitmaskGet(mat.texBitfield, HAS_METALLIC_ROUGHNESS)) {
-	    result.metallic *= texture(nonuniformEXT(imageHeap[mat.metallicRoughnessIndex]), inUV).b;
-	    result.roughness *= texture(nonuniformEXT(imageHeap[mat.metallicRoughnessIndex]), inUV).g;	
+	    result.metallic *= texture(UNPACK_TEX_2D(mat.metallicRoughnessIndex), inUV).b;
+	    result.roughness *= texture(UNPACK_TEX_2D(mat.metallicRoughnessIndex), inUV).g;	
     }
     
     result.roughness = max(result.roughness, 0.04f);

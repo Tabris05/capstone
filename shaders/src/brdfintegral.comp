@@ -1,12 +1,14 @@
 #version 460
 
 #include "extensions.glsl"
-
+#include "texture_heap.glsl"
 #include "types.glsl"
 
 #define PI 3.141593f
 
-layout(rg16f, binding = 0) uniform restrict writeonly image2D brdfLUTex;
+layout(push_constant, scalar) uniform constants {
+	u32 brdfLUTex;
+} pcs;
 
 vec2 hammersley(u32 i, u32 N) {
 	u32 bits = i;
@@ -45,7 +47,7 @@ f32 geometrySmith(vec3 normal, vec3 viewDir, vec3 lightDir, f32 roughness) {
 
 layout (local_size_x = 8, local_size_y = 8) in;
 void main() {
-	ivec2 dimensions = imageSize(brdfLUTex);
+	ivec2 dimensions = imageSize(UNPACK_IMG_2D(pcs.brdfLUTex));
 	vec2 uv = (vec2(gl_GlobalInvocationID.xy) + vec2(0.5f)) / dimensions;
 	const u32 sampleCount = 1024u;
 	vec3 V = vec3(1.0f - uv.x * uv.x, 0.0f, uv.x);
@@ -68,5 +70,5 @@ void main() {
 		}
 	}
 	result /= sampleCount;
-	imageStore(brdfLUTex, ivec2(gl_GlobalInvocationID.xy), vec4(result, 0.0f, 0.0f));
+	imageStore(UNPACK_IMG_2D(pcs.brdfLUTex), ivec2(gl_GlobalInvocationID.xy), vec4(result, 0.0f, 0.0f));
 }

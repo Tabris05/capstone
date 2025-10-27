@@ -15,12 +15,16 @@ layout(push_constant, scalar) uniform constants {
     u64 materialBuffer;
     u64 poissonDiskBuffer;
     mat4 cameraTransform;
-    mat4 lightTransform;
     mat4x3 modelTransform;
     vec4 lightColor;
     vec3 cameraPosition;
     vec3 lightAngle;
+    f32 orthoSize;
     u32 frameBufferWidth;
+    u32 irradianceMapIdx;
+    u32 radianceMapIdx;
+    u32 brdfIntegralTexIdx;
+    u32 shadowMapTexIdx;
 } pcs;
 
 void main() {

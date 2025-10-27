@@ -1,18 +1,19 @@
 #version 460
 
 #include "extensions.glsl"
-
+#include "texture_heap.glsl"
 #include "utils.glsl"
 
 #define INVPI 0.318309f
 
-layout(binding = 0) uniform sampler2D equirectangularMap;
-
-layout(r32ui, binding = 1) restrict writeonly uniform uimageCube outputTex;
+layout(push_constant, scalar) uniform constants {
+	u32 equirectangularMap;
+	u32 outputTex;
+} pcs;
 
 layout(local_size_x = 8, local_size_y = 8) in;
 void main() {
-	vec3 pos = 2.0f * vec3(gl_GlobalInvocationID.xy / vec2(imageSize(outputTex)), 1.0f) - 1.0f;
+	vec3 pos = 2.0f * vec3(gl_GlobalInvocationID.xy / vec2(imageSize(UNPACK_IMG_2D(pcs.outputTex))), 1.0f) - 1.0f;
 	vec3 faces[6] = {
 		vec3( pos.z, -pos.y, -pos.x),
 		vec3(-pos.z, -pos.y,  pos.x),
@@ -25,5 +26,5 @@ void main() {
 
 	vec2 uv = vec2(atan(pos.z, pos.x) * 0.5, asin(pos.y)) * INVPI + 0.5f;
 	uv.y = 1.0f - uv.y;
-	imageStore(outputTex, ivec3(gl_GlobalInvocationID), uvec4(packe5bgr9(clamp(textureLod(equirectangularMap, uv, 0), 0.0f, 100.0f))));
+	imageStore(UNPACK_UIMG_CUBE(pcs.outputTex), ivec3(gl_GlobalInvocationID), uvec4(packe5bgr9(clamp(textureLod(UNPACK_TEX_2D(pcs.equirectangularMap), uv, 0), 0.0f, 100.0f))));
 }

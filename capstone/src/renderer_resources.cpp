@@ -31,14 +31,13 @@ void Renderer::createSwapchain() {
 	vkGetSwapchainImagesKHR(m_ctx.device(), m_swapchain, &numSwapchainImages, m_swapchainImages.data());
 
 	for(VkImage img : m_swapchainImages) {
-		VkImageView curView;
-		vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
+		u32 handle = m_heap.allocImageHandle(ptr(VkImageViewCreateInfo{
 			.image = img,
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
 			.format = m_surfaceFormat.format,
 			.subresourceRange = colorSubresourceRange()
-		}), nullptr, &curView);
-		m_swapchainImageViews.push_back(curView);
+		}), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		m_swapchainHandles.push_back(handle);
 
 		VkSemaphore curSem;
 		vkCreateSemaphore(m_ctx.device(), ptr(VkSemaphoreCreateInfo{}), nullptr, &curSem);
@@ -46,23 +45,55 @@ void Renderer::createSwapchain() {
 	}
 
 	u32 numBloomMips = std::min(static_cast<u32>(std::floor(std::log2(std::max(m_window.width(), m_window.height()))) + 1), m_maxBloomMips);
-	m_oitBuffer = m_ctx.createBuffer(m_window.width() * m_window.height() * 4 * sizeof(OITNode), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	m_colorTarget = m_ctx.createImage(m_window.width(), m_window.height(), m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-	m_bloomTarget = m_ctx.createImage(m_window.width(), m_window.height(), m_colorFormat, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, numBloomMips);
-	m_depthTarget = m_ctx.createImage(m_window.width(), m_window.height(), m_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-	m_uiTarget = m_ctx.createImage(m_window.width(), m_window.height(), m_uiFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	m_oitBuffer = Buffer(m_ctx, m_window.width() * m_window.height() * 4 * sizeof(OITNode), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	m_colorTarget = Image(m_ctx, m_window.width(), m_window.height(), m_colorFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+	m_colorTargetHandleStorage = m_heap.allocImageHandle(ptr(m_colorTarget.viewCI()), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	m_colorTargetHandleSampled = m_heap.allocImageHandle(ptr(m_colorTarget.viewCI()), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
+	vkCreateImageView(m_ctx.device(), ptr(m_colorTarget.viewCI()), nullptr, &m_colorTargetView);
+	m_depthTarget = Image(m_ctx, m_window.width(), m_window.height(), m_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+	vkCreateImageView(m_ctx.device(), ptr(m_depthTarget.viewCI()), nullptr, &m_depthTargetView);
+	m_uiTarget = Image(m_ctx, m_window.width(), m_window.height(), m_uiFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	m_uiTargetHandle = m_heap.allocImageHandle(ptr(m_uiTarget.viewCI()), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	vkCreateImageView(m_ctx.device(), ptr(m_uiTarget.viewCI()), nullptr, &m_uiTargetView);
+	m_bloomTarget = Image(m_ctx, m_window.width(), m_window.height(), m_colorFormat, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, numBloomMips);
 
 	for(u8 i = 0; i < numBloomMips; i++) {
-		VkImageView cur;
-		vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
+		VkImageViewCreateInfo ci{
 			.image = m_bloomTarget.image(),
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
 			.format = m_colorFormat,
 			.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, VK_REMAINING_ARRAY_LAYERS }
-		}), nullptr, &cur);
+		};
+		u32 storageHandle = m_heap.allocImageHandle(&ci, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		u32 sampledHandle = m_heap.allocImageHandle(&ci, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
 
-		m_bloomMips.push_back(std::make_pair(cur, glm::uvec2(std::max(m_window.width() >> i, 1u), std::max(m_window.height() >> i, 1u))));
+		m_bloomMips.emplace_back(storageHandle, sampledHandle, glm::uvec2(std::max(m_window.width() >> i, 1u), std::max(m_window.height() >> i, 1u)));
 	}
+}
+
+void Renderer::destroySwapchain() {
+	for(auto mip : m_bloomMips) {
+		m_heap.freeImageHandle(mip.storageHandle);
+		m_heap.freeImageHandle(mip.sampledHandle);
+	}
+	m_bloomMips.clear();
+
+	for(u32 handle : m_swapchainHandles) {
+		m_heap.freeImageHandle(handle);
+	}
+	m_swapchainHandles.clear();
+	for(VkSemaphore sem : m_swapchainSems) {
+		vkDestroySemaphore(m_ctx.device(), sem, nullptr);
+	}
+	m_swapchainSems.clear();
+
+	vkDestroyImageView(m_ctx.device(), m_colorTargetView, nullptr);
+	vkDestroyImageView(m_ctx.device(), m_depthTargetView, nullptr);
+	vkDestroyImageView(m_ctx.device(), m_uiTargetView, nullptr);
+
+	m_heap.freeImageHandle(m_uiTargetHandle);
+	m_heap.freeImageHandle(m_colorTargetHandleStorage);
+	m_heap.freeImageHandle(m_colorTargetHandleSampled);
 }
 
 void Renderer::recreateSwapchain() {
@@ -70,25 +101,12 @@ void Renderer::recreateSwapchain() {
 
 	vkDeviceWaitIdle(m_ctx.device());
 
-	for(auto [view, _] : m_bloomMips) {
-		vkDestroyImageView(m_ctx.device(), view, nullptr);
-	}
-	m_bloomMips.clear();
-
-	for(VkImageView view : m_swapchainImageViews) {
-		vkDestroyImageView(m_ctx.device(), view, nullptr);
-	}
-	m_swapchainImageViews.clear();
-	for(VkSemaphore sem : m_swapchainSems) {
-		vkDestroySemaphore(m_ctx.device(), sem, nullptr);
-	}
-	m_swapchainSems.clear();
-
+	destroySwapchain();
 	createSwapchain();
 	m_swapchainDirty = false;
 }
 
-VkPipeline Renderer::createComputePipeline(VkPipelineLayout layout, std::initializer_list<u32> cs) {
+VkPipeline Renderer::createComputePipeline(std::initializer_list<u32> cs) {
 	VkPipeline ret;
 
 	vkCreateComputePipelines(m_ctx.device(), nullptr, 1, ptr(VkComputePipelineCreateInfo{
@@ -100,13 +118,13 @@ VkPipeline Renderer::createComputePipeline(VkPipelineLayout layout, std::initial
 			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
 			.pName = "main"
 		},
-		.layout = layout
+		.layout = m_heap.layout()
 	}), nullptr, &ret);
 
 	return ret;
 }
 
-VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::initializer_list<u32> vs, std::initializer_list<u32> fs, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment) {
+VkPipeline Renderer::createGraphicsPipeline(std::initializer_list<u32> vs, std::initializer_list<u32> fs, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment) {
 	VkPipeline ret;
 
 	vkCreateGraphicsPipelines(m_ctx.device(), nullptr, 1, ptr(VkGraphicsPipelineCreateInfo{
@@ -142,7 +160,7 @@ VkPipeline Renderer::createGraphicsPipeline(VkPipelineLayout layout, std::initia
 		.pDepthStencilState = ptr(VkPipelineDepthStencilStateCreateInfo{.depthTestEnable = true, .depthWriteEnable = depthWrite, .depthCompareOp = compareOp }),
 		.pColorBlendState = ptr(VkPipelineColorBlendStateCreateInfo{.attachmentCount = 1, .pAttachments = ptr(VkPipelineColorBlendAttachmentState{.colorWriteMask = colorComponentAll() })}),
 		.pDynamicState = ptr(VkPipelineDynamicStateCreateInfo{.dynamicStateCount = 2, .pDynamicStates = ptr({ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }) }),
-		.layout = layout
+		.layout = m_heap.layout()
 	}), nullptr, &ret);
 
 	return ret;

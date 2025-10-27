@@ -1,6 +1,7 @@
 #version 460
 
 #include "extensions.glsl"
+#include "types.glsl"
 
 vec3 vertices[36] = {
     { -1.0f,  1.0f, -1.0f },
@@ -45,6 +46,7 @@ layout(location = 0) out vec3 outPosition;
 
 layout(push_constant, scalar) uniform PushConstants {
     mat4 camMatrix;
+    u32 skyboxTex;
 } pcs;
 
 void main() {

@@ -16,8 +16,8 @@ class Fence {
 	private:
 		Fence(VkDevice m_device, VkSemaphore semaphore, u64 value);
 	
-		VkDevice m_device = nullptr;
-		VkSemaphore m_semaphore = nullptr;
+		VkDevice m_device = {};
+		VkSemaphore m_semaphore = {};
 		u64 m_value = 0;
 	
 		friend class Semaphore;
@@ -52,8 +52,8 @@ class Semaphore {
 	
 	private:
 	
-		VkDevice m_device = nullptr;
-		VkSemaphore m_semaphore = nullptr;
+		VkDevice m_device = {};
+		VkSemaphore m_semaphore = {};
 		std::atomic<u64> m_value = 0;
 };
 

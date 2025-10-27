@@ -26,16 +26,17 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	const fastgltf::Asset asset{ std::move(parser.loadGltf(data, path.parent_path(), options).get()) };
 
 	std::unordered_map<u32, b8> isSrgb;
-	std::vector<VkImageView> mipViews;
+	std::vector<u32> mipHandles;
 	std::vector<Buffer> imageStagingBuffers;
 	std::vector<Image> images;
-	std::vector<VkSampler> samplers;
+	std::vector<u32> imageHandles;
+	std::vector<u32> samplerHandles;
 	std::vector<Material> materials;
 	std::vector<Vertex> vertices;
 	std::vector<u32> indices;
 	std::vector<VkDrawIndexedIndirectCommand> opaqueDrawCmds;
 	std::vector<VkDrawIndexedIndirectCommand> blendDrawCmds;
-	std::vector<VkDescriptorImageInfo> descriptors;
+	std::vector<ImageHandle> descriptors;
 	VkDescriptorPool pool = {};
 	VkDescriptorSet set = {};
 
@@ -43,52 +44,13 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 	vkBeginCommandBuffer(m_transferCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 	vkBeginCommandBuffer(m_computeCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	m_heap.bind(m_computeCmdModelThread);
 
 	for(const fastgltf::Material& mat : asset.materials) {
-		Material m = {
-			.baseColor = glm::make_vec4(mat.pbrData.baseColorFactor.data()),
-			.emissiveColor = glm::vec4(glm::make_vec3(mat.emissiveFactor.data()), mat.emissiveStrength),
-			.metallic = mat.pbrData.metallicFactor,
-			.roughness = mat.pbrData.roughnessFactor
-		};
-
 		if(mat.pbrData.baseColorTexture.has_value()) {
 			isSrgb[asset.textures[mat.pbrData.baseColorTexture.value().textureIndex].imageIndex.value()] = true;
-			m.albedoIndex = mat.pbrData.baseColorTexture.value().textureIndex;
-			m.texBitfield |= HAS_ALBEDO;
 		}
-
-		if(mat.normalTexture.has_value()) {
-			m.normalIndex = mat.normalTexture.value().textureIndex;
-			m.texBitfield |= HAS_NORMAL;
-		}
-
-		if(mat.occlusionTexture.has_value()) {
-			m.occlusionIndex = mat.occlusionTexture.value().textureIndex;
-			m.texBitfield |= HAS_OCCLUSION;
-		}
-
-		if(mat.pbrData.metallicRoughnessTexture.has_value()) {
-			m.metallicRoughnessIndex = mat.pbrData.metallicRoughnessTexture.value().textureIndex;
-			m.texBitfield |= HAS_METALLIC_ROUGHNESS;
-		}
-
-		if(mat.emissiveTexture.has_value()) {
-			isSrgb[asset.textures[mat.emissiveTexture.value().textureIndex].imageIndex.value()] = true;
-			m.emissiveIndex = mat.emissiveTexture.value().textureIndex;
-			m.texBitfield |= HAS_EMISSIVE;
-		}
-
-		materials.push_back(m);
 	}
-
-	const u64 materialBufferByteSize = materials.size() * sizeof(Material);
-	Buffer stagingMaterialBuffer = m_ctx.createBuffer(materialBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	Buffer materialBuffer = m_ctx.createBuffer(materialBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	
-	memcpy(stagingMaterialBuffer.map<void>(), materials.data(), materialBufferByteSize);
-
-	vkCmdCopyBuffer(m_transferCmdModelThread, stagingMaterialBuffer.buffer(), materialBuffer.buffer(), 1, ptr(VkBufferCopy{ .size = materialBufferByteSize }));
 
 	for(const auto& [idx, img] : std::views::enumerate(asset.images)) {
 		i32 width;
@@ -98,12 +60,12 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 		u8 numMips = std::floor(std::log2(std::max(width, height))) + 1;
 
-		Buffer stagingBuffer = m_ctx.createBuffer(width * height * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		Buffer stagingBuffer(m_ctx, width * height * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 		memcpy(stagingBuffer.map<void>(), pixels, width * height * 4);
 		stbi_image_free(pixels);
 
-		Image image = m_ctx.createImage(width, height, isSrgb[idx] ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, numMips);
-
+		Image image(m_ctx, width, height, isSrgb[idx] ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, numMips);
+		imageHandles.emplace_back(m_heap.allocImageHandle(ptr(image.viewCI()), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE));
 		vkCmdInitializeColorImage(m_transferCmdModelThread, image.image());
 
 		vkCmdCopyBufferToImage2(m_transferCmdModelThread, ptr(VkCopyBufferToImageInfo2{
@@ -117,43 +79,26 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 			})
 		}));
 
-		VkImageView mip0View;
-		vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
+		VkImageViewCreateInfo ci{
 			.image = image.image(),
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
 			.format = VK_FORMAT_R8G8B8A8_UNORM,
 			.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
-		}), nullptr, &mip0View);
-		mipViews.push_back(mip0View);
+		};
+
+		u32 mip0Handle = m_heap.allocImageHandle(&ci, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		mipHandles.push_back(mip0Handle);
 
 		vkCmdBindPipeline(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, isSrgb[idx] ? m_srgbMipPipeline: m_mipPipeline);
 		for(u8 i = 1; i < numMips; i++) {
-			VkImageView curMipView;
-			vkCreateImageView(m_ctx.device(), ptr(VkImageViewCreateInfo{
-				.image = image.image(),
-				.viewType = VK_IMAGE_VIEW_TYPE_2D,
-				.format = VK_FORMAT_R8G8B8A8_UNORM,
-				.subresourceRange = VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 }
-			}), nullptr, &curMipView);
+			ci.subresourceRange.baseMipLevel = i;
+			u32 curHandle = m_heap.allocImageHandle(&ci, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 
-			vkCmdPushDescriptorSet(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_twoImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
-				.descriptorCount = 2,
-				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-				.pImageInfo = ptr({
-					VkDescriptorImageInfo{
-						.imageView = mipViews.back(),
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					},
-					VkDescriptorImageInfo{
-						.imageView = curMipView,
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					}
-				})
-			}));
-			mipViews.push_back(curMipView);
+			u32 handles[] = { mipHandles.back(), curHandle };
+			vkCmdPushConstants(m_computeCmdModelThread, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(handles), handles);
+			mipHandles.push_back(curHandle);
 
 			vkCmdDispatch(m_computeCmdModelThread, (std::max(width >> i, 1) + 7) / 8, (std::max(height >> i, 1) + 7) / 8, 1);
-
 			vkCmdBarrier(m_computeCmdModelThread, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 		}
 
@@ -164,8 +109,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	vkEndCommandBuffer(m_computeCmdModelThread);
 
 	for(const fastgltf::Sampler& s : asset.samplers) {
-		VkSampler sampler;
-		vkCreateSampler(m_ctx.device(), ptr(VkSamplerCreateInfo{
+		u32 handle = m_heap.allocSamplerHandle(ptr(VkSamplerCreateInfo{
 			.magFilter = m_filterMap.at(s.magFilter.value_or(fastgltf::Filter::Linear)),
 			.minFilter = m_filterMap.at(s.minFilter.value_or(fastgltf::Filter::Linear)),
 			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
@@ -174,58 +118,59 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 			.anisotropyEnable = true,
 			.maxAnisotropy = 16,
 			.maxLod = VK_LOD_CLAMP_NONE
-		}), nullptr, &sampler);
-		samplers.push_back(sampler);
+		}));
+		samplerHandles.push_back(handle);
 	}
 
 	for(const fastgltf::Texture tex : asset.textures) {
-		VkDescriptorImageInfo info = {
-			.sampler = samplers[tex.samplerIndex.value()],
-			.imageView = images[tex.imageIndex.value()].view(),
-			.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-		};
-
-		descriptors.push_back(info);
+		descriptors.emplace_back(imageHandles[tex.imageIndex.value()], samplerHandles[tex.samplerIndex.value()]);
 	}
 
-	if(descriptors.size() == 0) {
-		VkDescriptorImageInfo info = {
-				.sampler = m_skyboxSampler,
-				.imageView = nullptr,
-				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+	for(const fastgltf::Material& mat : asset.materials) {
+		Material m = {
+			.baseColor = glm::make_vec4(mat.pbrData.baseColorFactor.data()),
+			.emissiveColor = glm::vec4(glm::make_vec3(mat.emissiveFactor.data()), mat.emissiveStrength),
+			.metallic = mat.pbrData.metallicFactor,
+			.roughness = mat.pbrData.roughnessFactor
 		};
 
-		descriptors.push_back(info);
+		if(mat.pbrData.baseColorTexture.has_value()) {
+			isSrgb[asset.textures[mat.pbrData.baseColorTexture.value().textureIndex].imageIndex.value()] = true;
+			m.albedoIndex = descriptors[mat.pbrData.baseColorTexture.value().textureIndex];
+			m.texBitfield |= HAS_ALBEDO;
+		}
+
+		if(mat.normalTexture.has_value()) {
+			m.normalIndex = descriptors[mat.normalTexture.value().textureIndex];
+			m.texBitfield |= HAS_NORMAL;
+		}
+
+		if(mat.occlusionTexture.has_value()) {
+			m.occlusionIndex = descriptors[mat.occlusionTexture.value().textureIndex];
+			m.texBitfield |= HAS_OCCLUSION;
+		}
+
+		if(mat.pbrData.metallicRoughnessTexture.has_value()) {
+			m.metallicRoughnessIndex = descriptors[mat.pbrData.metallicRoughnessTexture.value().textureIndex];
+			m.texBitfield |= HAS_METALLIC_ROUGHNESS;
+		}
+
+		if(mat.emissiveTexture.has_value()) {
+			isSrgb[asset.textures[mat.emissiveTexture.value().textureIndex].imageIndex.value()] = true;
+			m.emissiveIndex = descriptors[mat.emissiveTexture.value().textureIndex];
+			m.texBitfield |= HAS_EMISSIVE;
+		}
+
+		materials.push_back(m);
 	}
 
-	vkCreateDescriptorPool(m_ctx.device(), ptr(VkDescriptorPoolCreateInfo{
-		.maxSets = 1,
-		.poolSizeCount = 1,
-		.pPoolSizes = ptr(VkDescriptorPoolSize{
-			.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.descriptorCount = static_cast<u32>(descriptors.size())
-		})
-	}), nullptr, &pool);
+	const u64 materialBufferByteSize = materials.size() * sizeof(Material);
+	Buffer stagingMaterialBuffer(m_ctx, materialBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer materialBuffer(m_ctx, materialBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	
+	memcpy(stagingMaterialBuffer.map<void>(), materials.data(), materialBufferByteSize);
 
-	vkAllocateDescriptorSets(m_ctx.device(), ptr(VkDescriptorSetAllocateInfo{
-		.pNext = ptr(VkDescriptorSetVariableDescriptorCountAllocateInfo{
-			.descriptorSetCount = 1,
-			.pDescriptorCounts = ptr<u32>(descriptors.size())
-		}),
-		.descriptorPool = pool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = &m_modelSetLayout
-	}), &set);
-
-	vkUpdateDescriptorSets(m_ctx.device(), 1, ptr(VkWriteDescriptorSet{
-		.dstSet = set,
-		.dstBinding = 0,
-		.dstArrayElement = 0,
-		.descriptorCount = static_cast<u32>(descriptors.size()),
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.pImageInfo = descriptors.data()
-	}), 0, nullptr);
-
+	vkCmdCopyBuffer(m_transferCmdModelThread, stagingMaterialBuffer.buffer(), materialBuffer.buffer(), 1, ptr(VkBufferCopy{ .size = materialBufferByteSize }));
 	u64 numVertices = 0;
 	u64 numIndices = 0;
 	u64 numPrimitives = 0;
@@ -364,12 +309,12 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 	const u64 opaqueIndirectBufferByteSize = opaqueDrawCmds.size() * sizeof(VkDrawIndexedIndirectCommand);
 	const u64 blendIndirectBufferByteSize = blendDrawCmds.size() * sizeof(VkDrawIndexedIndirectCommand);
 	const u64 indirectBufferByteSize = opaqueIndirectBufferByteSize + blendIndirectBufferByteSize;
-	Buffer stagingVertexBuffer = m_ctx.createBuffer(vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	Buffer stagingIndexBuffer = m_ctx.createBuffer(indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	Buffer stagingIndirectBuffer = m_ctx.createBuffer(indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	Buffer vertexBuffer = m_ctx.createBuffer(vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	Buffer indexBuffer = m_ctx.createBuffer(indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	Buffer indirectBuffer = m_ctx.createBuffer(indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	Buffer stagingVertexBuffer(m_ctx, vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer stagingIndexBuffer(m_ctx, indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer stagingIndirectBuffer(m_ctx, indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	Buffer vertexBuffer(m_ctx, vertexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	Buffer indexBuffer(m_ctx, indexBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	Buffer indirectBuffer(m_ctx, indirectBufferByteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	memcpy(stagingVertexBuffer.map<void>(), vertices.data(), vertexBufferByteSize);
 	memcpy(stagingIndexBuffer.map<void>(), indices.data(), indexBufferByteSize);
@@ -417,18 +362,17 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 
 	vkResetCommandPool(m_ctx.device(), m_transferPoolModelThread, 0);
 
-	for(VkImageView i : mipViews) {
-		vkDestroyImageView(m_ctx.device(), i, nullptr);
+	for(u32 handle : mipHandles) {
+		m_heap.freeImageHandle(handle);
 	}
 
 	vkResetCommandPool(m_ctx.device(), m_computePoolModelThread, 0);
 
 	Model model;
-	model.device = m_ctx.device();
+	model.heap = &m_heap;
 	model.images = std::move(images);
-	model.samplers = std::move(samplers);
-	model.texPool = pool;
-	model.texSet = set;
+	model.imageHandles = std::move(imageHandles);
+	model.samplerHandles = std::move(samplerHandles);
 	model.materialBuffer = std::move(materialBuffer);
 	model.vertexBuffer = std::move(vertexBuffer);
 	model.indexBuffer = std::move(indexBuffer);

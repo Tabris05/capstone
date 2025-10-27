@@ -394,7 +394,7 @@ void Renderer::render(f32 thisFrame) {
 	}
 	ImGui::Render();
 
-	f32 orthoSize = std::sqrt(2.0f) / 2.0f * m_modelScale;
+	f32 orthoSize = std::sqrt(2.0f) / m_modelScale;
 	glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(m_modelScale))
 		* glm::rotate(glm::mat4(1.0f), m_modelPitch * 2.0f * std::numbers::pi_v<f32>, glm::vec3(1.0f, 0.0f, 0.0f))
 		* glm::rotate(glm::mat4(1.0f), m_modelYaw * 2.0f * std::numbers::pi_v<f32>, glm::vec3(0.0f, 1.0f, 0.0f))
@@ -402,22 +402,24 @@ void Renderer::render(f32 thisFrame) {
 		* m_model.baseTransform;
 	glm::mat4 view = glm::lookAt(m_position, m_camIdx == 1 ? m_position + m_rotation : glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 projection = perspective(glm::radians(m_fov / 2.0f), static_cast<f32>(m_window.width()) / static_cast<f32>(m_window.height()), 0.1f);
-	glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f), m_lightAngle, glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::mat4 lightProjection = ortho(orthoSize, -orthoSize, -orthoSize, orthoSize, -orthoSize, orthoSize);
 	glm::mat4 camMatrixNoTranslation = projection * glm::mat4(glm::mat3(view));
 
-	PushConstants pushConstants = {
+	PushConstants pushConstants{
 		m_oitBuffer.map<void>(),
 		m_model.vertexBuffer.map<void>(),
 		m_model.materialBuffer.map<void>(),
 		m_poissonDiskBuffer.map<void>(),
 		projection * view,
-		lightProjection * lightView,
 		model,
 		m_lightColor,
 		m_position,
 		m_lightAngle,
-		m_window.width()
+		orthoSize,
+		m_window.width(),
+		ImageHandle(m_skybox.irradianceMapHandle, m_genericSamplerHandle),
+		ImageHandle(m_skybox.radianceMapHandle, m_genericSamplerHandle),
+		ImageHandle(m_brdfIntegralTexHandle, m_genericSamplerHandle),
+		ImageHandle(m_shadowMapHandle, m_shadowSamplerHandle)
 	};
 
 	auto& frameData = m_perFrameData[m_frameIndex];
@@ -435,6 +437,7 @@ void Renderer::render(f32 thisFrame) {
 	vkResetCommandPool(m_ctx.device(), frameData.cmdPool, 0);
 
 	vkBeginCommandBuffer(frameData.cmdBuffer, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
+	m_heap.bind(frameData.cmdBuffer, true);
 
 	vkCmdSetViewport(frameData.cmdBuffer, 0, 1, ptr(VkViewport{ 0.0f, 0.0f, static_cast<f32>(m_shadowMapSize), static_cast<f32>(m_shadowMapSize), 0.0f, 1.0f }));
 	vkCmdSetScissor(frameData.cmdBuffer, 0, 1, ptr(VkRect2D{ { 0, 0 }, { static_cast<u32>(m_shadowMapSize), static_cast<u32>(m_shadowMapSize) } }));
@@ -448,7 +451,7 @@ void Renderer::render(f32 thisFrame) {
 			.renderArea = { 0, 0, { static_cast<u32>(m_shadowMapSize), static_cast<u32>(m_shadowMapSize) } },
 			.layerCount = 1,
 			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-				.imageView = m_shadowMap.view(),
+				.imageView = m_shadowMapView,
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -459,7 +462,7 @@ void Renderer::render(f32 thisFrame) {
 		if(m_model.numOpaqueDrawCommands > 0) {
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
 			vkCmdBindIndexBuffer(frameData.cmdBuffer, m_model.indexBuffer.buffer(), 0, VK_INDEX_TYPE_UINT32);
-			vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
+			vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pushConstants);
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 		}
 
@@ -478,7 +481,7 @@ void Renderer::render(f32 thisFrame) {
 			.renderArea = { 0, 0, { m_window.width(), m_window.height() } },
 			.layerCount = 1,
 			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-				.imageView = m_depthTarget.view(),
+				.imageView = m_depthTargetView,
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -504,14 +507,14 @@ void Renderer::render(f32 thisFrame) {
 			.layerCount = 1,
 			.colorAttachmentCount = 1,
 			.pColorAttachments = ptr(VkRenderingAttachmentInfo{
-				.imageView = m_colorTarget.view(),
+				.imageView = m_colorTargetView,
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 				.clearValue = { 0.0f, 0.0f, 0.0f, 1.0f }
 			}),
 			.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-				.imageView = m_depthTarget.view(),
+				.imageView = m_depthTargetView,
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -520,63 +523,20 @@ void Renderer::render(f32 thisFrame) {
 
 		if(m_model.numOpaqueDrawCommands > 0) {
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_opaquePipeline);
-			vkCmdBindDescriptorSets(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 0, 1, &m_model.texSet, 0, nullptr);
-			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 1, 4, ptr({
-				VkWriteDescriptorSet{
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.sampler = m_skyboxSampler,
-						.imageView = m_skybox.irradianceMap.view(),
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					})
-				},
-				VkWriteDescriptorSet{
-					.dstBinding = 1,
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.sampler = m_skyboxSampler,
-						.imageView = m_skybox.radianceMap.view(),
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					})
-				},
-				VkWriteDescriptorSet{
-					.dstBinding = 2,
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.sampler = m_skyboxSampler,
-						.imageView = m_brdfIntegralTex.view(),
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					})
-				},
-				VkWriteDescriptorSet{
-					.dstBinding = 3,
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.sampler = m_shadowSampler,
-						.imageView = m_shadowMap.view(),
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					})
-				}
-			}));
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 		}
 
 		if(m_skybox.environmentMap.image() != VkImage{}) {
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipeline);
-			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.sampler = m_skyboxSampler,
-					.imageView = m_skybox.environmentMap.view(),
-					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-				})
-				}));
-			vkCmdPushConstants(frameData.cmdBuffer, m_skyboxPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &camMatrixNoTranslation);
+
+			struct {
+				glm::mat4 transform;
+				ImageHandle skybox;
+			} skyboxPCs;
+			skyboxPCs.transform = camMatrixNoTranslation;
+			skyboxPCs.skybox = ImageHandle(m_skybox.environmentMapHandle, m_genericSamplerHandle);
+
+			vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(skyboxPCs), &skyboxPCs);
 			vkCmdDraw(frameData.cmdBuffer, 36, 1, 0, 0);
 		}
 
@@ -596,7 +556,7 @@ void Renderer::render(f32 thisFrame) {
 				.renderArea = { 0, 0, { m_window.width(), m_window.height() } },
 				.layerCount = 1,
 				.pDepthAttachment = ptr(VkRenderingAttachmentInfo{
-					.imageView = m_depthTarget.view(),
+					.imageView = m_depthTargetView,
 					.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 					.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 					.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -604,53 +564,8 @@ void Renderer::render(f32 thisFrame) {
 			}));
 
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_blendPipeline);
-
-			vkCmdBindDescriptorSets(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 0, 1, &m_model.texSet, 0, nullptr);
-			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_modelPipelineLayout, 1, 4, ptr({
-				VkWriteDescriptorSet{
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.sampler = m_skyboxSampler,
-						.imageView = m_skybox.irradianceMap.view(),
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					})
-				},
-				VkWriteDescriptorSet{
-					.dstBinding = 1,
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.sampler = m_skyboxSampler,
-						.imageView = m_skybox.radianceMap.view(),
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					})
-				},
-				VkWriteDescriptorSet{
-					.dstBinding = 2,
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.sampler = m_skyboxSampler,
-						.imageView = m_brdfIntegralTex.view(),
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					})
-				},
-				VkWriteDescriptorSet{
-					.dstBinding = 3,
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.sampler = m_shadowSampler,
-						.imageView = m_shadowMap.view(),
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					})
-				}
-			}));
-			vkCmdPushConstants(frameData.cmdBuffer, m_modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
-
+			vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pushConstants);
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), m_model.numOpaqueDrawCommands * sizeof(VkDrawIndexedIndirectCommand), m_model.numBlendDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
-
 			vkCmdEndRendering(frameData.cmdBuffer);
 		}
 	}
@@ -665,7 +580,7 @@ void Renderer::render(f32 thisFrame) {
 			.layerCount = 1,
 			.colorAttachmentCount = 1,
 			.pColorAttachments = ptr(VkRenderingAttachmentInfo{
-				.imageView = m_uiTarget.view(),
+				.imageView = m_uiTargetView,
 				.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -684,19 +599,16 @@ void Renderer::render(f32 thisFrame) {
 			vkCmdBarrier(frameData.cmdBuffer, { { PipelineStage::FragmentWrite, PipelineStage::ComputeRead }, { PipelineStage::ColorTarget, PipelineStage::Compute } });
 
 			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_transparencyCompositePipeline);
-			vkCmdPushConstants(frameData.cmdBuffer, m_transparencyCompositePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VkDeviceAddress), ptr(m_oitBuffer.map<void>()));
-			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_transparencyCompositePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-				.pImageInfo = ptr({
-					VkDescriptorImageInfo{
-						.imageView = m_colorTarget.view(),
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					}
-				})
-			}));
-			vkCmdDispatch(frameData.cmdBuffer, (m_window.width() + 7) / 8, (m_window.height() + 7) / 8, 1);
 
+			struct {
+				void* oitBuffer;
+				u32 colorTarget;
+			} compositePCs;
+			compositePCs.oitBuffer = m_oitBuffer.map<void>();
+			compositePCs.colorTarget = m_colorTargetHandleStorage;
+
+			vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(compositePCs), &compositePCs);
+			vkCmdDispatch(frameData.cmdBuffer, (m_window.width() + 7) / 8, (m_window.height() + 7) / 8, 1);
 			vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeWrite, PipelineStage::CopyRead);
 		}
 	}
@@ -729,58 +641,27 @@ void Renderer::render(f32 thisFrame) {
 
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_bloomDownsamplePipeline);
 		for(u32 i = 1; i < m_bloomMips.size(); i++) {
-			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_bloomPipelineLayout, 0, 2, ptr({
-				VkWriteDescriptorSet{
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.sampler = m_skyboxSampler,
-						.imageView = m_bloomMips[i - 1].first,
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					}),
-				},
-				VkWriteDescriptorSet{
-					.dstBinding = 1,
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.imageView = m_bloomMips[i].first,
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					})
-				},
-			}));
-			vkCmdPushConstants(frameData.cmdBuffer, m_bloomPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(u32), ptr(i - 1));
-			vkCmdDispatch(frameData.cmdBuffer, (m_bloomMips[i].second.x + 7) / 8, (m_bloomMips[i].second.y + 7) / 8, 1);
+			struct {
+				ImageHandle sampled;
+				ImageHandle storage;
+				u32 inputMip;
+			} bloomDownsamplePCs;
+			bloomDownsamplePCs.sampled = ImageHandle(m_bloomMips[i - 1].sampledHandle, m_genericSamplerHandle);
+			bloomDownsamplePCs.storage = ImageHandle(m_bloomMips[i].storageHandle);
+			bloomDownsamplePCs.inputMip = i - 1;
 
+			vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(bloomDownsamplePCs), &bloomDownsamplePCs);
+			vkCmdDispatch(frameData.cmdBuffer, (m_bloomMips[i].bounds.x + 7) / 8, (m_bloomMips[i].bounds.y + 7) / 8, 1);
 			vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 		}
 
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_bloomUpsamplePipeline);
 		for(u32 i = m_bloomMips.size() - 1; i >= 1; i--) {
 			vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeRead, PipelineStage::Compute);
+			ImageHandle handles[] = { ImageHandle(m_bloomMips[i].sampledHandle, m_genericSamplerHandle), ImageHandle(m_bloomMips[i - 1].storageHandle) };
 
-			vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_bloomPipelineLayout, 0, 2, ptr({
-				VkWriteDescriptorSet{
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.sampler = m_skyboxSampler,
-						.imageView = m_bloomMips[i].first,
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					}),
-				},
-				VkWriteDescriptorSet{
-					.dstBinding = 1,
-					.descriptorCount = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-					.pImageInfo = ptr(VkDescriptorImageInfo{
-						.imageView = m_bloomMips[i - 1].first,
-						.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-					})
-				},
-			}));
-			vkCmdDispatch(frameData.cmdBuffer, (m_bloomMips[i - 1].second.x + 7) / 8, (m_bloomMips[i - 1].second.y + 7) / 8, 1);
-
+			vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(handles), handles);
+			vkCmdDispatch(frameData.cmdBuffer, (m_bloomMips[i - 1].bounds.x + 7) / 8, (m_bloomMips[i - 1].bounds.y + 7) / 8, 1);
 			vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 		}
 	}
@@ -788,26 +669,18 @@ void Renderer::render(f32 thisFrame) {
 	// post-processing pass
 	{
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipeline);
-		vkCmdPushConstants(frameData.cmdBuffer, m_postprocessingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(u32), &m_colorIdx);
-		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
-			.descriptorCount = 2,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-			.pImageInfo = ptr({
-				VkDescriptorImageInfo{
-					.imageView = m_colorTarget.view(),
-					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-				},
-				VkDescriptorImageInfo{
-					.imageView = m_bloomMips.front().first,
-					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-				}
-			})
-		}));
+		struct {
+			ImageHandle colorTarget;
+			ImageHandle bloomTarget;
+			u32 tonemapper;
+		} postprocessPCs;
+		postprocessPCs.colorTarget = ImageHandle(m_colorTargetHandleStorage);
+		postprocessPCs.bloomTarget = ImageHandle(m_bloomMips.front().storageHandle);
+		postprocessPCs.tonemapper = m_colorIdx;
 
+		vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(postprocessPCs), &postprocessPCs);
 		vkCmdDispatch(frameData.cmdBuffer, (m_window.width() + 7) / 8, (m_window.height() + 7) / 8, 1);
-
 		vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
-
 	}
 
 	// fxaa pass
@@ -815,28 +688,10 @@ void Renderer::render(f32 thisFrame) {
 		vkCmdInitializeColorImage(frameData.cmdBuffer, m_swapchainImages[imageIndex]);
 
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_AAIdx == 1 ? m_fxaaPipeline : m_blitPipeline);
-		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneTexOneImagePipelineLayout, 0, 2, ptr({
-			VkWriteDescriptorSet{
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.sampler = m_skyboxSampler,
-					.imageView = m_colorTarget.view(),
-					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-				}),
-			},
-			VkWriteDescriptorSet{
-				.dstBinding = 1,
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-				.pImageInfo = ptr(VkDescriptorImageInfo{
-					.imageView = m_swapchainImageViews[imageIndex],
-					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-				})
-			},
-		}));
+		ImageHandle handles[] = { ImageHandle(m_colorTargetHandleSampled, m_genericSamplerHandle), ImageHandle(m_swapchainHandles[imageIndex]) };
+		
+		vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(handles), handles);
 		vkCmdDispatch(frameData.cmdBuffer, (m_window.width() + 7) / 8, (m_window.height() + 7) / 8, 1);
-
 		vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 	}
 
@@ -845,22 +700,10 @@ void Renderer::render(f32 thisFrame) {
 		vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ColorTarget, PipelineStage::ComputeRead);
 
 		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_uiCompositePipeline);
-		vkCmdPushDescriptorSet(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_twoImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
-			.descriptorCount = 2,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-			.pImageInfo = ptr({
-				VkDescriptorImageInfo{
-					.imageView = m_swapchainImageViews[imageIndex],
-					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-				},
-				VkDescriptorImageInfo{
-					.imageView = m_uiTarget.view(),
-					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-				}
-			})
-		}));
-		vkCmdDispatch(frameData.cmdBuffer, (m_window.width() + 7) / 8, (m_window.height() + 7) / 8, 1);
+		ImageHandle handles[] = { ImageHandle(m_swapchainHandles[imageIndex]), ImageHandle(m_uiTargetHandle) };
 
+		vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(handles), handles);
+		vkCmdDispatch(frameData.cmdBuffer, (m_window.width() + 7) / 8, (m_window.height() + 7) / 8, 1);
 		vkCmdPreparePresent(frameData.cmdBuffer, m_swapchainImages[imageIndex]);
 	}
 

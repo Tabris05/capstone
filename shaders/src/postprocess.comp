@@ -1,19 +1,19 @@
 #version 460
 
 #include "extensions.glsl"
+#include "texture_heap.glsl"
 #include "utils.glsl"
 
-layout(rgba16f, binding = 0) uniform restrict image2D framebuffer;
-layout(rgba16f, binding = 1) uniform restrict readonly image2D bloomBuffer;
-
 layout(push_constant, scalar) uniform constants {
+    u32 frameBuffer;
+    u32 bloomBuffer;
     u32 tonemapper;
 } pcs;
 
 layout(local_size_x = 8, local_size_y = 8) in;
 void main() {
-    vec3 color = imageLoad(framebuffer, ivec2(gl_GlobalInvocationID)).rgb;
-    color = mix(color, imageLoad(bloomBuffer, ivec2(gl_GlobalInvocationID)).rgb, 0.04f);
+    vec3 color = imageLoad(UNPACK_IMG_2D(pcs.frameBuffer), ivec2(gl_GlobalInvocationID)).rgb;
+    color = mix(color, imageLoad(UNPACK_IMG_2D(pcs.bloomBuffer), ivec2(gl_GlobalInvocationID)).rgb, 0.04f);
 
     switch(pcs.tonemapper) {
         case 0:
@@ -30,5 +30,5 @@ void main() {
             break;
     }
 
-    imageStore(framebuffer, ivec2(gl_GlobalInvocationID), vec4(color, 1.0f));
+    imageStore(UNPACK_IMG_2D(pcs.frameBuffer), ivec2(gl_GlobalInvocationID), vec4(color, 1.0f));
 }

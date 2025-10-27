@@ -1,15 +1,16 @@
 #version 460
 
 #include "extensions.glsl"
+#include "texture_heap.glsl"
+#include "utils.glsl"
 
 #define PI 3.141593f
 #define EPSILON 0.000001f
 
-#include "utils.glsl"
-
-layout(binding = 0) uniform samplerCube skyboxTex;
-
-layout(r32ui, binding = 1) uniform restrict writeonly uimageCube outputTex;
+layout(push_constant, scalar) uniform constants {
+    u32 skyboxTex;
+    u32 outputTex;
+} pcs;
 
 vec2 hammersley(u32 i, u32 N) {
     u32 bits = i;
@@ -48,10 +49,10 @@ vec3 importanceSampleGGX(vec2 Xi, vec3 normal, f32 roughness) {
 
 layout(local_size_x = 8, local_size_y = 8) in;
 void main() {
-    f32 resolution = textureSize(skyboxTex, 0).x;
-    f32 roughness = (countMips(textureSize(skyboxTex, 0)) - countMips(imageSize(outputTex))) / (countMips(textureSize(skyboxTex, 0)) - 1.0f);
+    f32 resolution = textureSize(UNPACK_TEX_CUBE(pcs.skyboxTex), 0).x;
+    f32 roughness = (countMips(textureSize(UNPACK_TEX_CUBE(pcs.skyboxTex), 0)) - countMips(imageSize(UNPACK_UIMG_CUBE(pcs.outputTex)))) / (countMips(textureSize(UNPACK_TEX_CUBE(pcs.skyboxTex), 0)) - 1.0f);
     
-    vec3 pos = 2.0f * vec3(gl_GlobalInvocationID.xy / vec2(imageSize(outputTex)), 1.0f) - 1.0f;
+    vec3 pos = 2.0f * vec3(gl_GlobalInvocationID.xy / vec2(imageSize(UNPACK_UIMG_CUBE(pcs.outputTex))), 1.0f) - 1.0f;
 	vec3 faces[6] = {
 		vec3( pos.z, -pos.y, -pos.x),
 		vec3(-pos.z, -pos.y,  pos.x),
@@ -74,10 +75,10 @@ void main() {
         if(nDotL > 0.0f) {
             f32 pdf = distributionGGX(normal, H, roughness) * max(dot(normal, H), 0.0f) / (4.0f * max(dot(H, normal), 0.0f)) + EPSILON;
             f32 mip = roughness == 0.0f ? 0.0f : 0.5f * log2((1.0f / (sampleCount * pdf + EPSILON)) / (4.0f * PI / (6.0f * resolution * resolution)));
-            prefilterColor += textureLod(skyboxTex, L, mip).rgb * nDotL;
+            prefilterColor += textureLod(UNPACK_TEX_CUBE(pcs.skyboxTex), L, mip).rgb * nDotL;
             totalWeight += nDotL;
         }
     }
     
-    imageStore(outputTex, ivec3(gl_GlobalInvocationID), uvec4(packe5bgr9(vec4(prefilterColor / totalWeight, 1.0f))));
+    imageStore(UNPACK_UIMG_CUBE(pcs.outputTex), ivec3(gl_GlobalInvocationID), uvec4(packe5bgr9(vec4(prefilterColor / totalWeight, 1.0f))));
 }

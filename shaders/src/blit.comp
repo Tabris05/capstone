@@ -1,14 +1,18 @@
 #version 460
 
 #include "extensions.glsl"
+#include "texture_heap.glsl"
+#include "types.glsl"
 
-layout(binding = 0) uniform sampler2D Source;
-layout(binding = 1) restrict writeonly uniform image2D Output;
+layout(push_constant, scalar) uniform constants {
+   u32 src;
+   u32 dst;
+} pcs;
 
 layout(local_size_x = 8, local_size_y = 8) in;
 void main() {
-   vec2 size = vec2(textureSize(Source, 0));
+   vec2 size = vec2(textureSize(UNPACK_TEX_2D(pcs.src), 0));
    vec2 vTexCoord = (vec2(gl_GlobalInvocationID) + 0.5f) / size;
 
-   imageStore(Output, ivec2(gl_GlobalInvocationID), clamp(textureLod(Source, vTexCoord, 0), vec4(0.0f), vec4(1.0f)));
+   imageStore(UNPACK_IMG_2D(pcs.dst), ivec2(gl_GlobalInvocationID), clamp(textureLod(UNPACK_TEX_2D(pcs.src), vTexCoord, 0), vec4(0.0f), vec4(1.0f)));
 }

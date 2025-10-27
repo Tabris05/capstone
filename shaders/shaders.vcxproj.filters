@@ -78,17 +78,20 @@
     <None Include="src\skybox.vert">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="src\extensions.glsl">
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\texture_heap.glsl" />
+    <ClInclude Include="src\extensions.glsl">
       <Filter>Header Files</Filter>
-    </None>
-    <None Include="src\pbr.glsl">
+    </ClInclude>
+    <ClInclude Include="src\pbr.glsl">
       <Filter>Header Files</Filter>
-    </None>
-    <None Include="src\types.glsl">
+    </ClInclude>
+    <ClInclude Include="src\types.glsl">
       <Filter>Header Files</Filter>
-    </None>
-    <None Include="src\utils.glsl">
+    </ClInclude>
+    <ClInclude Include="src\utils.glsl">
       <Filter>Header Files</Filter>
-    </None>
+    </ClInclude>
   </ItemGroup>
 </Project>

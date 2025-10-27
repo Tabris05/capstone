@@ -34,7 +34,14 @@
 
 #include <resources/roboto_regular.h>
 
-Renderer::Renderer(const char* path) {
+Renderer::Renderer(const char* path) :
+	m_heap(m_ctx.device()),
+	m_poissonDiskBuffer(m_ctx, m_poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+	m_brdfIntegralTex(m_ctx, m_brdfIntegralLUTSize, m_brdfIntegralLUTSize, VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT),
+	m_brdfIntegralTexHandle(m_heap.allocImageHandle(ptr(m_brdfIntegralTex.viewCI()), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)),
+	m_shadowMap(m_ctx, m_shadowMapSize, m_shadowMapSize, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT),
+	m_shadowMapHandle(m_heap.allocImageHandle(ptr(m_shadowMap.viewCI()), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)) {
+
 	// glfw
 	{
 		glfwSetWindowUserPointer(m_window.window(), this);
@@ -110,12 +117,12 @@ Renderer::Renderer(const char* path) {
 		vkCreateCommandPool(m_ctx.device(), ptr(VkCommandPoolCreateInfo{
 			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
 			.queueFamilyIndex = m_ctx.queueFamilies()[2]
-			}), nullptr, &m_transferPoolSkyboxThread);
+		}), nullptr, &m_transferPoolSkyboxThread);
 		vkAllocateCommandBuffers(m_ctx.device(), ptr(VkCommandBufferAllocateInfo{
 			.commandPool = m_transferPoolSkyboxThread,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1
-			}), &m_transferCmdSkyboxThread);
+		}), &m_transferCmdSkyboxThread);
 
 		vkCreateCommandPool(m_ctx.device(), ptr(VkCommandPoolCreateInfo{
 			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
@@ -141,152 +148,27 @@ Renderer::Renderer(const char* path) {
 		m_skyboxSem = Semaphore(m_ctx.device());
 	}
 
-	// compute pipeline layouts
-	{
-		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
-			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
-			.bindingCount = 1,
-			.pBindings = ptr(VkDescriptorSetLayoutBinding{
-				.binding = 0,
-				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-			})
-		}), nullptr, &m_oneImageSetLayout);
-
-		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
-			.setLayoutCount = 1,
-			.pSetLayouts = &m_oneImageSetLayout
-		}), nullptr, &m_oneImagePipelineLayout);
-
-		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
-			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
-			.bindingCount = 2,
-			.pBindings = ptr({
-				VkDescriptorSetLayoutBinding{
-					.binding = 0,
-					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-				},
-				VkDescriptorSetLayoutBinding{
-					.binding = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-				}
-			})
-		}), nullptr, &m_twoImageSetLayout);
-
-		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
-			.setLayoutCount = 1,
-			.pSetLayouts = &m_twoImageSetLayout
-		}), nullptr, &m_twoImagePipelineLayout);
-
-		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
-			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
-			.bindingCount = 2,
-			.pBindings = ptr({
-				VkDescriptorSetLayoutBinding{
-					.binding = 0,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-				},
-				VkDescriptorSetLayoutBinding{
-					.binding = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-				}
-			})
-		}), nullptr, &m_oneTexOneImageSetLayout);
-
-		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
-			.setLayoutCount = 1,
-			.pSetLayouts = &m_oneTexOneImageSetLayout
-		}), nullptr, &m_oneTexOneImagePipelineLayout);
-
-		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
-			.setLayoutCount = 1,
-			.pSetLayouts = &m_oneTexOneImageSetLayout,
-			.pushConstantRangeCount = 1,
-			.pPushConstantRanges = ptr(VkPushConstantRange{
-				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-				.offset = 0,
-				.size = sizeof(u32)
-			})
-		}), nullptr, &m_bloomPipelineLayout);
-
-		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
-			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
-			.bindingCount = 3,
-			.pBindings = ptr({
-				VkDescriptorSetLayoutBinding{
-					.binding = 0,
-					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-				},
-				VkDescriptorSetLayoutBinding{
-					.binding = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-				},
-				VkDescriptorSetLayoutBinding{
-					.binding = 2,
-					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-				}
-			})
-		}), nullptr, &m_threeImageSetLayout);
-
-		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
-			.setLayoutCount = 1,
-			.pSetLayouts = &m_twoImageSetLayout,
-			.pushConstantRangeCount = 1,
-			.pPushConstantRanges = ptr(VkPushConstantRange{
-				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-				.offset = 0,
-				.size = sizeof(u32)
-			})
-		}), nullptr, &m_postprocessingPipelineLayout);
-
-		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
-			.setLayoutCount = 1,
-			.pSetLayouts = &m_oneImageSetLayout,
-			.pushConstantRangeCount = 1,
-			.pPushConstantRanges = ptr(VkPushConstantRange{
-				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-				.offset = 0,
-				.size = sizeof(VkDeviceAddress)
-			})
-		}), nullptr, &m_transparencyCompositePipelineLayout);
-	}
-
 	// compute pipelines
 	{
-		m_mipPipeline = createComputePipeline(m_twoImagePipelineLayout, mip_comp);
-		m_srgbMipPipeline = createComputePipeline(m_twoImagePipelineLayout, srgbmip_comp);
-		m_cubePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, cube_comp);
-		m_cubeMipPipeline = createComputePipeline(m_twoImagePipelineLayout, cubemip_comp);
-		m_irradiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, irradiance_comp);
-		m_radiancePipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, radiance_comp);
-		m_brdfIntegralPipeline = createComputePipeline(m_oneImagePipelineLayout, brdfintegral_comp);
-		m_transparencyCompositePipeline = createComputePipeline(m_transparencyCompositePipelineLayout, transparencycomposite_comp);
-		m_postprocessingPipeline = createComputePipeline(m_postprocessingPipelineLayout, postprocess_comp);
-		m_uiCompositePipeline = createComputePipeline(m_twoImagePipelineLayout, uicomposite_comp);
-		m_bloomDownsamplePipeline = createComputePipeline(m_bloomPipelineLayout, bloomdownsample_comp);
-		m_bloomUpsamplePipeline = createComputePipeline(m_bloomPipelineLayout, bloomupsample_comp);
-		m_fxaaPipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, fxaa_comp);
-		m_blitPipeline = createComputePipeline(m_oneTexOneImagePipelineLayout, blit_comp);
+		m_mipPipeline = createComputePipeline(mip_comp);
+		m_srgbMipPipeline = createComputePipeline(srgbmip_comp);
+		m_cubePipeline = createComputePipeline(cube_comp);
+		m_cubeMipPipeline = createComputePipeline(cubemip_comp);
+		m_irradiancePipeline = createComputePipeline(irradiance_comp);
+		m_radiancePipeline = createComputePipeline(radiance_comp);
+		m_brdfIntegralPipeline = createComputePipeline(brdfintegral_comp);
+		m_transparencyCompositePipeline = createComputePipeline(transparencycomposite_comp);
+		m_postprocessingPipeline = createComputePipeline(postprocess_comp);
+		m_uiCompositePipeline = createComputePipeline(uicomposite_comp);
+		m_bloomDownsamplePipeline = createComputePipeline(bloomdownsample_comp);
+		m_bloomUpsamplePipeline = createComputePipeline(bloomupsample_comp);
+		m_fxaaPipeline = createComputePipeline(fxaa_comp);
+		m_blitPipeline = createComputePipeline(blit_comp);
 	}
 
 	// global samplers
 	{
-		vkCreateSampler(m_ctx.device(), ptr(VkSamplerCreateInfo{
+		m_genericSamplerHandle = m_heap.allocSamplerHandle(ptr(VkSamplerCreateInfo{
 			.magFilter = VK_FILTER_LINEAR,
 			.minFilter = VK_FILTER_LINEAR,
 			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
@@ -296,45 +178,28 @@ Renderer::Renderer(const char* path) {
 			.anisotropyEnable = true,
 			.maxAnisotropy = 16,
 			.maxLod = VK_LOD_CLAMP_NONE
-		}), nullptr, &m_skyboxSampler);
+		}));
 
-		vkCreateSampler(m_ctx.device(), ptr(VkSamplerCreateInfo{
+		m_shadowSamplerHandle = m_heap.allocSamplerHandle(ptr(VkSamplerCreateInfo{
 			.magFilter = VK_FILTER_LINEAR,
 			.minFilter = VK_FILTER_LINEAR,
 			.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 			.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 			.compareEnable = true,
 			.compareOp = VK_COMPARE_OP_GREATER
-		}), nullptr, &m_shadowSampler);
+		}));
 	}
 
 	// generate brdf integral tex
 	{
-		m_brdfIntegralTex = m_ctx.createImage(m_brdfIntegralLUTSize, m_brdfIntegralLUTSize, VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-
+		u32 brdfImageHandle = m_heap.allocImageHandle(ptr(m_brdfIntegralTex.viewCI()), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		vkBeginCommandBuffer(m_computeCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 		
-		vkCmdPipelineBarrier2(m_computeCmdModelThread, ptr(VkDependencyInfo{
-			.imageMemoryBarrierCount = 1,
-			.pImageMemoryBarriers = ptr(VkImageMemoryBarrier2{
-				.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-				.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-				.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-				.image = m_brdfIntegralTex.image(),
-				.subresourceRange = colorSubresourceRange()
-			})
-		}));
+		vkCmdInitializeColorImage(m_computeCmdModelThread, m_brdfIntegralTex.image());
+		m_heap.bind(m_computeCmdModelThread);
 
 		vkCmdBindPipeline(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_brdfIntegralPipeline);
-
-		vkCmdPushDescriptorSet(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_oneImagePipelineLayout, 0, 1, ptr(VkWriteDescriptorSet{
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-			.pImageInfo = ptr(VkDescriptorImageInfo{
-				.imageView = m_brdfIntegralTex.view(),
-				.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-			})
-		}));
+		vkCmdPushConstants(m_computeCmdModelThread, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(u32), &brdfImageHandle);
 
 		vkCmdDispatch(m_computeCmdModelThread, (m_brdfIntegralLUTSize + 7) / 8, (m_brdfIntegralLUTSize + 7) / 8, 1);
 
@@ -347,16 +212,13 @@ Renderer::Renderer(const char* path) {
 
 		vkQueueWaitIdle(m_ctx.computeQueue());
 		vkResetCommandPool(m_ctx.device(), m_computePoolModelThread, 0);
+		m_heap.freeImageHandle(brdfImageHandle);
 	}
 
-	// Allocate Shadow Map
+	// upload blue noise
 	{
-		m_shadowMap = m_ctx.createImage(m_shadowMapSize, m_shadowMapSize, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-		
-		u32 poissonDiskBufferSize = m_poissonDiskWindowSize * m_poissonDiskWindowSize * m_poissonDiskFilterSize * m_poissonDiskFilterSize * sizeof(glm::vec2);
-
 		std::vector<glm::vec2> samples;
-		samples.reserve(poissonDiskBufferSize / sizeof(glm::vec2));
+		samples.reserve(m_poissonDiskBufferSize / sizeof(glm::vec2));
 
 		std::default_random_engine generator;
 		std::uniform_real_distribution<f32> distribution(-0.5f, 0.5f);
@@ -373,12 +235,11 @@ Renderer::Renderer(const char* path) {
 			}
 		}
 
-		Buffer poissonDiskStagingBuffer = m_ctx.createBuffer(poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-		m_poissonDiskBuffer = m_ctx.createBuffer(poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		memcpy(poissonDiskStagingBuffer.map<void>(), samples.data(), poissonDiskBufferSize);
+		Buffer poissonDiskStagingBuffer(m_ctx, m_poissonDiskBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		memcpy(poissonDiskStagingBuffer.map<void>(), samples.data(), m_poissonDiskBufferSize);
 
 		vkBeginCommandBuffer(m_transferCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
-		vkCmdCopyBuffer(m_transferCmdModelThread, poissonDiskStagingBuffer.buffer(), m_poissonDiskBuffer.buffer(), 1, ptr(VkBufferCopy{ .size = poissonDiskBufferSize }));
+		vkCmdCopyBuffer(m_transferCmdModelThread, poissonDiskStagingBuffer.buffer(), m_poissonDiskBuffer.buffer(), 1, ptr(VkBufferCopy{ .size = m_poissonDiskBufferSize }));
 		vkEndCommandBuffer(m_transferCmdModelThread);
 
 		vkQueueSubmit2(m_ctx.transferQueue(), 1, ptr(VkSubmitInfo2{
@@ -390,97 +251,22 @@ Renderer::Renderer(const char* path) {
 		vkResetCommandPool(m_ctx.device(), m_transferPoolModelThread, 0);
 	}
 
+	// shadow map image view
+	{
+		vkCreateImageView(m_ctx.device(), ptr(m_shadowMap.viewCI()), nullptr, &m_shadowMapView);
+	}
+
 	// Color Pass Pipelines
 	{
-		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
-			.pNext = ptr(VkDescriptorSetLayoutBindingFlagsCreateInfo{
-				.bindingCount = 1,
-				.pBindingFlags = ptr<VkDescriptorBindingFlags>(VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)
-			}),
-			.bindingCount = 1,
-			.pBindings = ptr(VkDescriptorSetLayoutBinding{
-				.binding = 0,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = m_ctx.maxSampledDescriptors(),
-				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-			})
-		}), nullptr, &m_modelSetLayout);
-
-		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
-			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
-			.bindingCount = 4,
-			.pBindings = ptr({
-				VkDescriptorSetLayoutBinding{
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-				},
-				VkDescriptorSetLayoutBinding{
-					.binding = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-				},
-				VkDescriptorSetLayoutBinding{
-					.binding = 2,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-				},
-				VkDescriptorSetLayoutBinding{
-					.binding = 3,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.descriptorCount = 1,
-					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-				}
-			})
-		}), nullptr, &m_modelPushDescriptorLayout);
-
-		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
-			.setLayoutCount = 2,
-			.pSetLayouts = ptr({ m_modelSetLayout, m_modelPushDescriptorLayout }),
-			.pushConstantRangeCount = 1,
-			.pPushConstantRanges = ptr(VkPushConstantRange{
-				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-				.offset = 0,
-				.size = sizeof(PushConstants),
-			})
-		}), nullptr, &m_modelPipelineLayout);
-
-		m_opaquePipeline = createGraphicsPipeline(m_modelPipelineLayout, model_vert, opaque_frag, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_EQUAL, false, true);
-		m_blendPipeline = createGraphicsPipeline(m_modelPipelineLayout, model_vert, blend_frag, VK_CULL_MODE_NONE, VK_COMPARE_OP_GREATER, false, false);
+		m_opaquePipeline = createGraphicsPipeline(model_vert, opaque_frag, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_EQUAL, false, true);
+		m_blendPipeline = createGraphicsPipeline(model_vert, blend_frag, VK_CULL_MODE_NONE, VK_COMPARE_OP_GREATER, false, false);
+		m_skyboxPipeline = createGraphicsPipeline(skybox_vert, skybox_frag, VK_CULL_MODE_NONE, VK_COMPARE_OP_EQUAL, false, true);
 	}
 
 	// Depth Only Pipelines
 	{
-		m_prepassPipeline = createGraphicsPipeline(m_modelPipelineLayout, prepass_vert, {}, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
-		m_shadowPipeline = createGraphicsPipeline(m_modelPipelineLayout, shadow_vert, {}, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
-	}
-
-	// Skybox Pipeline
-	{
-		vkCreateDescriptorSetLayout(m_ctx.device(), ptr(VkDescriptorSetLayoutCreateInfo{
-			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
-			.bindingCount = 1,
-			.pBindings = ptr(VkDescriptorSetLayoutBinding{
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-			})
-		}), nullptr, &m_skyboxSetLayout);
-
-		vkCreatePipelineLayout(m_ctx.device(), ptr(VkPipelineLayoutCreateInfo{
-			.setLayoutCount = 1,
-			.pSetLayouts = &m_skyboxSetLayout,
-			.pushConstantRangeCount = 1,
-			.pPushConstantRanges = ptr(VkPushConstantRange{
-				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-				.offset = 0,
-				.size = sizeof(glm::mat4),
-			})
-		}), nullptr, &m_skyboxPipelineLayout);
-
-		m_skyboxPipeline = createGraphicsPipeline(m_skyboxPipelineLayout, skybox_vert, skybox_frag, VK_CULL_MODE_NONE, VK_COMPARE_OP_EQUAL, false, true);
+		m_prepassPipeline = createGraphicsPipeline(prepass_vert, {}, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
+		m_shadowPipeline = createGraphicsPipeline(shadow_vert, {}, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
 	}
 
 	// ImGui
@@ -643,48 +429,18 @@ Renderer::~Renderer() {
 	vkDestroyPipeline(m_ctx.device(), m_mipPipeline, nullptr);
 	vkDestroyPipeline(m_ctx.device(), m_srgbMipPipeline, nullptr);
 	vkDestroyPipeline(m_ctx.device(), m_skyboxPipeline, nullptr);
-	
-	vkDestroyPipelineLayout(m_ctx.device(), m_postprocessingPipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_ctx.device(), m_threeImageSetLayout, nullptr);
-
-	vkDestroyPipelineLayout(m_ctx.device(), m_oneTexOneImagePipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_ctx.device(), m_oneTexOneImageSetLayout, nullptr);
-
-	vkDestroyPipelineLayout(m_ctx.device(), m_bloomPipelineLayout, nullptr);
-	vkDestroyPipelineLayout(m_ctx.device(), m_twoImagePipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_ctx.device(), m_twoImageSetLayout, nullptr);
-
-	vkDestroyPipelineLayout(m_ctx.device(), m_transparencyCompositePipelineLayout, nullptr);
-	vkDestroyPipelineLayout(m_ctx.device(), m_oneImagePipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_ctx.device(), m_oneImageSetLayout, nullptr);
-
-
-	vkDestroyPipelineLayout(m_ctx.device(), m_skyboxPipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_ctx.device(), m_skyboxSetLayout, nullptr);
-
 	vkDestroyPipeline(m_ctx.device(), m_shadowPipeline, nullptr);
 	vkDestroyPipeline(m_ctx.device(), m_prepassPipeline, nullptr);
 	vkDestroyPipeline(m_ctx.device(), m_blendPipeline, nullptr);
 	vkDestroyPipeline(m_ctx.device(), m_opaquePipeline, nullptr);
-	vkDestroyPipelineLayout(m_ctx.device(), m_modelPipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_ctx.device(), m_modelSetLayout, nullptr);
-	vkDestroyDescriptorSetLayout(m_ctx.device(), m_modelPushDescriptorLayout, nullptr);
 
-	vkDestroySampler(m_ctx.device(), m_shadowSampler, nullptr);
-	vkDestroySampler(m_ctx.device(), m_skyboxSampler, nullptr);
+	vkDestroyImageView(m_ctx.device(), m_shadowMapView, nullptr);
+	m_heap.freeImageHandle(m_brdfIntegralTexHandle);
+	m_heap.freeImageHandle(m_shadowMapHandle);
+	m_heap.freeSamplerHandle(m_genericSamplerHandle);
+	m_heap.freeSamplerHandle(m_shadowSamplerHandle);
 
-	for(auto [view, _] : m_bloomMips) {
-		vkDestroyImageView(m_ctx.device(), view, nullptr);
-	}
-	
-	for(VkImageView view : m_swapchainImageViews) {
-		vkDestroyImageView(m_ctx.device(), view, nullptr);
-	}
-
-	for(VkSemaphore sem : m_swapchainSems) {
-		vkDestroySemaphore(m_ctx.device(), sem, nullptr);
-	}
-
+	destroySwapchain();
 	vkDestroySwapchainKHR(m_ctx.device(), m_swapchain, nullptr);
 	vkDestroySurfaceKHR(m_ctx.instance(), m_surface, nullptr);
 }

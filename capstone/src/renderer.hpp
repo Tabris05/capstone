@@ -15,7 +15,11 @@
 #include <any>
 #include "semaphore.hpp"
 #include "context.hpp"
+#include "buffer.hpp"
+#include "image.hpp"
+#include "descriptor_heap.hpp"
 #include "window.hpp"
+#include "image_handle.hpp"
 
 class Renderer {
 	public:
@@ -40,6 +44,7 @@ class Renderer {
 		static constexpr u32 m_shadowMapSize = 2048; // this is hardcoded in shadow.vert and pbr.glsl
 		static constexpr u32 m_poissonDiskWindowSize = 8; // this is hardcoded in pbr.glsl
 		static constexpr u32 m_poissonDiskFilterSize = 9; // this is hardcoded in pbr.glsl
+		static constexpr u32 m_poissonDiskBufferSize = m_poissonDiskWindowSize * m_poissonDiskWindowSize * m_poissonDiskFilterSize * m_poissonDiskFilterSize * sizeof(glm::vec2);
 		static constexpr f32 m_maxPitch = 89.0f; // in deg
 		static constexpr VkFormat m_colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 		static constexpr VkFormat m_depthFormat = VK_FORMAT_D32_SFLOAT;
@@ -66,11 +71,10 @@ class Renderer {
 		};
 
 		struct Model {
-			VkDevice device = {};
+			DescriptorHeap* heap = nullptr;
 			std::vector<Image> images;
-			std::vector<VkSampler> samplers;
-			VkDescriptorPool texPool = {};
-			VkDescriptorSet texSet = {};
+			std::vector<u32> imageHandles;
+			std::vector<u32> samplerHandles;
 			Buffer materialBuffer;
 			Buffer vertexBuffer;
 			Buffer indexBuffer;
@@ -93,22 +97,34 @@ class Renderer {
 			};
 
 			~Model() {
-				if(device) {
-					for(VkSampler i : samplers) {
-						vkDestroySampler(device, i, nullptr);
+				if(heap) {
+					for(u32 handle : imageHandles) {
+						heap->freeImageHandle(handle);
 					}
-
-					vkDestroyDescriptorPool(device, texPool, nullptr);
+					for(u32 handle : samplerHandles) {
+						heap->freeSamplerHandle(handle);
+					}
 				}
 			}
 		};
 
 		struct Skybox {
+			DescriptorHeap* heap = nullptr;
 			Image environmentMap;
+			u32 environmentMapHandle = ~0u;
 			Image irradianceMap;
+			u32 irradianceMapHandle = ~0u;
 			Image radianceMap;
+			u32 radianceMapHandle = ~0u;
 
 			Skybox() = default;
+			~Skybox() {
+				if(heap) {
+					heap->freeImageHandle(environmentMapHandle);
+					heap->freeImageHandle(irradianceMapHandle);
+					heap->freeImageHandle(radianceMapHandle);
+				}
+			}
 
 			Skybox(Skybox&& src) {
 				memcpy(this, &src, sizeof(Skybox));
@@ -127,12 +143,22 @@ class Renderer {
 			void* materialBuffer;
 			void* poissonDiskBuffer;
 			glm::mat4 cameraTransform;
-			glm::mat4 lightTransform;
 			glm::mat4x3 modelTransform;
 			glm::vec4 lightColor;
 			glm::vec3 camPos;
 			glm::vec3 lightAngle;
+			f32 orthoSize;
 			u32 frameBufferWidth;
+			ImageHandle irradianceMap;
+			ImageHandle radianceMap;
+			ImageHandle brdfIntegralTex;
+			ImageHandle shadowMapTex;
+		};
+
+		struct BloomMip {
+			u32 storageHandle;
+			u32 sampledHandle;
+			glm::uvec2 bounds;
 		};
 
 		struct {
@@ -150,26 +176,22 @@ class Renderer {
 		b8 m_swapchainDirty = false;
 
 		VulkanContext m_ctx;
+		DescriptorHeap m_heap;
 
 		VkSurfaceKHR m_surface = {};
 		VkSurfaceFormatKHR m_surfaceFormat;
 		VkPresentModeKHR m_nonVsyncPresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 		VkSwapchainKHR m_swapchain = {};
 		std::vector<VkImage> m_swapchainImages;
-		std::vector<VkImageView> m_swapchainImageViews;
+		std::vector<u32> m_swapchainHandles;
 		std::vector<VkSemaphore> m_swapchainSems;
-		std::vector<std::pair<VkImageView, glm::uvec2>> m_bloomMips;
+		std::vector<BloomMip> m_bloomMips;
 
-		VkDescriptorSetLayout m_modelSetLayout = {};
-		VkDescriptorSetLayout m_modelPushDescriptorLayout = {};
-		VkPipelineLayout m_modelPipelineLayout = {};
 		VkPipeline m_prepassPipeline = {};
 		VkPipeline m_shadowPipeline = {};
 		VkPipeline m_opaquePipeline = {};
 		VkPipeline m_blendPipeline = {};
 
-		VkDescriptorSetLayout m_skyboxSetLayout = {};
-		VkPipelineLayout m_skyboxPipelineLayout = {};
 		VkPipeline m_skyboxPipeline = {};
 		
 		VkCommandPool m_transferPoolModelThread = {};
@@ -181,20 +203,6 @@ class Renderer {
 		VkCommandBuffer m_computeCmdModelThread = {};
 		VkCommandPool m_computePoolSkyboxThread = {};
 		VkCommandBuffer m_computeCmdSkyboxThread = {};
-
-		VkDescriptorSetLayout m_oneImageSetLayout = {};
-		VkPipelineLayout m_oneImagePipelineLayout = {};
-		VkPipelineLayout m_transparencyCompositePipelineLayout = {};
-
-		VkDescriptorSetLayout m_twoImageSetLayout = {};
-		VkPipelineLayout m_twoImagePipelineLayout = {};
-
-		VkDescriptorSetLayout m_oneTexOneImageSetLayout = {};
-		VkPipelineLayout m_oneTexOneImagePipelineLayout = {};
-		VkPipelineLayout m_bloomPipelineLayout = {};
-		
-		VkDescriptorSetLayout m_threeImageSetLayout = {};
-		VkPipelineLayout m_postprocessingPipelineLayout = {};
 
 		VkPipeline m_mipPipeline = {};
 		VkPipeline m_srgbMipPipeline = {};
@@ -218,16 +226,26 @@ class Renderer {
 		Buffer m_poissonDiskBuffer;
 		Buffer m_oitBuffer;
 		Image m_colorTarget;
-		Image m_bloomTarget;
+		VkImageView m_colorTargetView;
+		u32 m_colorTargetHandleStorage;
+		u32 m_colorTargetHandleSampled;
 		Image m_depthTarget;
+		VkImageView m_depthTargetView;
 		Image m_uiTarget;
+		VkImageView m_uiTargetView;
+		u32 m_uiTargetHandle;
+		Image m_bloomTarget;
 		Model m_model;
 
 		Skybox m_skybox;
 		Image m_brdfIntegralTex;
+		u32 m_brdfIntegralTexHandle;
 		Image m_shadowMap;
-		VkSampler m_skyboxSampler = {};
-		VkSampler m_shadowSampler = {};
+		VkImageView m_shadowMapView;
+		u32 m_shadowMapHandle;
+
+		u32 m_genericSamplerHandle;
+		u32 m_shadowSamplerHandle;
 
 		// asset loading
 		b8 m_loadingModel = false;
@@ -279,14 +297,15 @@ class Renderer {
 		ImFont* m_largeFont = nullptr;
 
 		void createSwapchain();
+		void destroySwapchain();
 		void recreateSwapchain();
 
 		Model createModel(std::filesystem::path path);
 
 		Skybox createSkybox(std::filesystem::path path);
 
-		VkPipeline createComputePipeline(VkPipelineLayout layout, std::initializer_list<u32> cs);
-		VkPipeline createGraphicsPipeline(VkPipelineLayout layout, std::initializer_list<u32> vs, std::initializer_list<u32> fs, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment);
+		VkPipeline createComputePipeline(std::initializer_list<u32> cs);
+		VkPipeline createGraphicsPipeline(std::initializer_list<u32> vs, std::initializer_list<u32> fs, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment);
 
 		void handleInput(f32 deltaTime);
 		void render(f32 thisFrame);

@@ -32,10 +32,6 @@ u32* VulkanContext::queueFamilies() {
 	return m_queueFamilies;
 }
 
-u32 VulkanContext::maxSampledDescriptors() {
-	return m_maxSampledImageDescriptors;
-}
-
 u32 VulkanContext::getMemoryIndex(VkMemoryPropertyFlags flags, u32 mask) {
 	for(u32 idx = 0; idx < m_memProps.memoryTypeCount; idx++) {
 		if(((1 << idx) & mask) && (m_memProps.memoryTypes[idx].propertyFlags & flags) == flags) {
@@ -62,14 +58,10 @@ VulkanContext::VulkanContext() {
 		volkLoadInstanceOnly(m_instance);
 	}
 
-	// VkPhysicalDevice, VkPhysicalDeviceMemoryProperties, and VkPhysicalDeviceProperties::limits::maxPerStageDescriptorSampledImages
+	// VkPhysicalDevice and VkPhysicalDeviceMemoryProperties
 	{
 		vkEnumeratePhysicalDevices(m_instance, ptr(1u), &m_physicalDevice);
 		vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &m_memProps);
-
-		VkPhysicalDeviceProperties props;
-		vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
-		m_maxSampledImageDescriptors = std::min(props.limits.maxPerStageDescriptorSampledImages, props.limits.maxPerStageDescriptorSamplers) - 4;
 	}
 
 	// VkDevice and VkQueues
@@ -83,21 +75,25 @@ VulkanContext::VulkanContext() {
 					.pNext = ptr(VkPhysicalDeviceVulkan12Features{
 						.pNext = ptr(VkPhysicalDeviceVulkan13Features{
 							.pNext = ptr(VkPhysicalDeviceVulkan14Features{
-								.pNext = ptr(VkPhysicalDeviceRobustness2FeaturesEXT{
+								.pNext = ptr(VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT{
 									.pNext = ptr(VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT{
 										.pNext = ptr(VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR{.shaderMaximalReconvergence = true }),
 										.fragmentShaderPixelInterlock = true
 									}),
-									.nullDescriptor = true
+									.mutableDescriptorType = true
 								}),
 								.maintenance5 = true,
-								.pushDescriptor = true,
+								.pushDescriptor = true
 							}),
 							.synchronization2 = true,
 							.dynamicRendering = true
 						}),
 						.shaderSampledImageArrayNonUniformIndexing = true,
-						.descriptorBindingVariableDescriptorCount = true,
+						.shaderStorageImageArrayNonUniformIndexing = true,
+						.descriptorBindingSampledImageUpdateAfterBind = true,
+						.descriptorBindingStorageBufferUpdateAfterBind = true,
+						.descriptorBindingPartiallyBound = true,
+						.descriptorBindingVariableDescriptorCount = true, // foo: delete
 						.runtimeDescriptorArray = true,
 						.scalarBlockLayout = true,
 						.timelineSemaphore = true,
@@ -106,7 +102,7 @@ VulkanContext::VulkanContext() {
 						.vulkanMemoryModelDeviceScope = true,
 						.vulkanMemoryModelAvailabilityVisibilityChains = true
 					}),
-					.shaderDrawParameters = true,
+					.shaderDrawParameters = true
 				}),
 				.features{
 					.multiDrawIndirect = true,
@@ -139,7 +135,7 @@ VulkanContext::VulkanContext() {
 			.enabledExtensionCount = 4,
 			.ppEnabledExtensionNames = ptr<const char*>({
 				VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-				VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
+				VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME,
 				VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME,
 				VK_KHR_SHADER_MAXIMAL_RECONVERGENCE_EXTENSION_NAME
 			}),
