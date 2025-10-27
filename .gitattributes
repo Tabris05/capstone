@@ -1,4 +1,5 @@
 capstone/include/** linguist-vendored
 capstone/lib/** linguist-vendored
+shaders/output/** linguist-vendored
 
 *.h linguist-language=C++
