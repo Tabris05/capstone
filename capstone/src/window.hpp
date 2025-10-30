@@ -23,6 +23,11 @@ public:
 	Window();
 	~Window();
 
+	Window(const Window&) = delete;
+	Window& operator=(const Window&) = delete;
+	Window(Window&& src);
+	Window& operator=(Window&& src);
+
 private:
 	i32 m_width;
 	i32 m_height;

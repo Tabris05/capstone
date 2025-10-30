@@ -172,6 +172,7 @@
     <ClCompile Include="src\descriptor_heap.cpp" />
     <ClCompile Include="src\image.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\pipeline.cpp" />
     <ClCompile Include="src\renderer.cpp" />
     <ClCompile Include="src\renderer_model.cpp" />
     <ClCompile Include="src\renderer_raii.cpp" />
@@ -190,6 +191,7 @@
     <ClInclude Include="src\descriptor_heap.hpp" />
     <ClInclude Include="src\image.hpp" />
     <ClInclude Include="src\image_handle.hpp" />
+    <ClInclude Include="src\pipeline.hpp" />
     <ClInclude Include="src\renderer.hpp" />
     <ClInclude Include="src\semaphore.hpp" />
     <ClInclude Include="src\window.hpp" />

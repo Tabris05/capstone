@@ -153,6 +153,16 @@ VulkanContext::~VulkanContext() {
 	vkDestroyInstance(m_instance, nullptr);
 }
 
+VulkanContext::VulkanContext(VulkanContext&& src) {
+	memcpy(this, &src, sizeof(VulkanContext));
+	memset(&src, 0, sizeof(VulkanContext));
+}
+
+VulkanContext& VulkanContext::operator=(VulkanContext&& src) {
+	this->~VulkanContext();
+	new (this) VulkanContext(std::move(src)); return *this;
+};
+
 u32 VulkanContext::getQueue(VkQueueFlags include, VkQueueFlags exclude) {
 	u32 size = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &size, nullptr);

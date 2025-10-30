@@ -41,14 +41,8 @@ class Semaphore {
 	
 		Semaphore(const Semaphore&) = delete;
 		Semaphore& operator=(const Semaphore&) = delete;
-		Semaphore(Semaphore&& src) {
-			memcpy(this, &src, sizeof(Semaphore));
-			memset(&src, 0, sizeof(Semaphore));
-		}
-		Semaphore& operator=(Semaphore&& src) {
-			this->~Semaphore();
-			new (this) Semaphore(std::move(src)); return *this;
-		};
+		Semaphore(Semaphore&& src);
+		Semaphore& operator=(Semaphore&& src);
 	
 	private:
 	

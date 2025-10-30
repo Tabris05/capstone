@@ -65,7 +65,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 
 	ImageHandle envHandles[] = { ImageHandle(srcHandle, m_genericSamplerHandle), ImageHandle(envMapHandleStorage) };
 
-	vkCmdBindPipeline(m_computeCmdSkyboxThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_cubePipeline);
+	m_cubePipeline.bind(m_computeCmdSkyboxThread);
 	vkCmdPushConstants(m_computeCmdSkyboxThread, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(envHandles), envHandles);
 	vkCmdDispatch(m_computeCmdSkyboxThread, (cubeSize + 7) / 8, (cubeSize + 7) / 8, 6);
 
@@ -79,7 +79,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 	u32 mip0Handle = m_heap.allocImageHandle(&ci, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 	mipHandles.push_back(mip0Handle);
 
-	vkCmdBindPipeline(m_computeCmdSkyboxThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_cubeMipPipeline);
+	m_cubeMipPipeline.bind(m_computeCmdSkyboxThread);
 	for(u8 i = 1; i < cubeMips; i++) {
 		vkCmdBarrier(m_computeCmdSkyboxThread, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 
@@ -96,7 +96,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 	vkCmdInitializeColorImage(m_computeCmdSkyboxThread, irradianceMap.image());
 	vkCmdBarrier(m_computeCmdSkyboxThread, PipelineStage::Compute, PipelineStage::ComputeRead);
 
-	vkCmdBindPipeline(m_computeCmdSkyboxThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_irradiancePipeline);
+	m_irradiancePipeline.bind(m_computeCmdSkyboxThread);
 
 	ImageHandle handles[] = { ImageHandle(envMapHandleSampled, m_genericSamplerHandle), ImageHandle(irradMapHandleStorage) };
 	vkCmdPushConstants(m_computeCmdSkyboxThread, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(handles), handles);
@@ -104,7 +104,7 @@ Renderer::Skybox Renderer::createSkybox(std::filesystem::path path) {
 
 	vkCmdInitializeColorImage(m_computeCmdSkyboxThread, radianceMap.image());
 
-	vkCmdBindPipeline(m_computeCmdSkyboxThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_radiancePipeline);
+	m_radiancePipeline.bind(m_computeCmdSkyboxThread);
 
 	for(u8 i = 0; i < cubeMips; i++) {
 		u32 curMipHandle = m_heap.allocImageHandle(ptr(VkImageViewCreateInfo{

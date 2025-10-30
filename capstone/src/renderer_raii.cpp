@@ -40,7 +40,25 @@ Renderer::Renderer(const char* path) :
 	m_brdfIntegralTex(m_ctx, m_brdfIntegralLUTSize, m_brdfIntegralLUTSize, VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT),
 	m_brdfIntegralTexHandle(m_heap.allocImageHandle(ptr(m_brdfIntegralTex.viewCI()), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)),
 	m_shadowMap(m_ctx, m_shadowMapSize, m_shadowMapSize, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT),
-	m_shadowMapHandle(m_heap.allocImageHandle(ptr(m_shadowMap.viewCI()), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)) {
+	m_shadowMapHandle(m_heap.allocImageHandle(ptr(m_shadowMap.viewCI()), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)),
+	m_opaquePipeline(m_ctx.device(), m_heap.layout(), model_vert, opaque_frag, m_colorFormat, m_depthFormat, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_EQUAL, false),
+	m_blendPipeline(m_ctx.device(), m_heap.layout(), model_vert, blend_frag, VK_FORMAT_UNDEFINED, m_depthFormat, VK_CULL_MODE_NONE, VK_COMPARE_OP_GREATER, false),
+	m_skyboxPipeline(m_ctx.device(), m_heap.layout(), skybox_vert, skybox_frag, m_colorFormat, m_depthFormat, VK_CULL_MODE_NONE, VK_COMPARE_OP_EQUAL, false),
+	m_prepassPipeline(m_ctx.device(), m_heap.layout(), prepass_vert, {}, VK_FORMAT_UNDEFINED, m_depthFormat, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true),
+	m_shadowPipeline(m_ctx.device(), m_heap.layout(), shadow_vert, {}, VK_FORMAT_UNDEFINED, m_depthFormat, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true),
+	m_mipPipeline(m_ctx.device(), m_heap.layout(), mip_comp),
+	m_srgbMipPipeline(m_ctx.device(), m_heap.layout(), srgbmip_comp),
+	m_cubePipeline(m_ctx.device(), m_heap.layout(), cube_comp),
+	m_cubeMipPipeline(m_ctx.device(), m_heap.layout(), cubemip_comp),
+	m_irradiancePipeline(m_ctx.device(), m_heap.layout(), irradiance_comp),
+	m_radiancePipeline(m_ctx.device(), m_heap.layout(), radiance_comp),
+	m_transparencyCompositePipeline(m_ctx.device(), m_heap.layout(), transparencycomposite_comp),
+	m_postprocessingPipeline(m_ctx.device(), m_heap.layout(), postprocess_comp),
+	m_uiCompositePipeline(m_ctx.device(), m_heap.layout(), uicomposite_comp),
+	m_bloomDownsamplePipeline(m_ctx.device(), m_heap.layout(), bloomdownsample_comp),
+	m_bloomUpsamplePipeline(m_ctx.device(), m_heap.layout(), bloomupsample_comp),
+	m_fxaaPipeline(m_ctx.device(), m_heap.layout(), fxaa_comp),
+	m_blitPipeline(m_ctx.device(), m_heap.layout(), blit_comp) {
 
 	// glfw
 	{
@@ -148,24 +166,6 @@ Renderer::Renderer(const char* path) :
 		m_skyboxSem = Semaphore(m_ctx.device());
 	}
 
-	// compute pipelines
-	{
-		m_mipPipeline = createComputePipeline(mip_comp);
-		m_srgbMipPipeline = createComputePipeline(srgbmip_comp);
-		m_cubePipeline = createComputePipeline(cube_comp);
-		m_cubeMipPipeline = createComputePipeline(cubemip_comp);
-		m_irradiancePipeline = createComputePipeline(irradiance_comp);
-		m_radiancePipeline = createComputePipeline(radiance_comp);
-		m_brdfIntegralPipeline = createComputePipeline(brdfintegral_comp);
-		m_transparencyCompositePipeline = createComputePipeline(transparencycomposite_comp);
-		m_postprocessingPipeline = createComputePipeline(postprocess_comp);
-		m_uiCompositePipeline = createComputePipeline(uicomposite_comp);
-		m_bloomDownsamplePipeline = createComputePipeline(bloomdownsample_comp);
-		m_bloomUpsamplePipeline = createComputePipeline(bloomupsample_comp);
-		m_fxaaPipeline = createComputePipeline(fxaa_comp);
-		m_blitPipeline = createComputePipeline(blit_comp);
-	}
-
 	// global samplers
 	{
 		m_genericSamplerHandle = m_heap.allocSamplerHandle(ptr(VkSamplerCreateInfo{
@@ -192,13 +192,14 @@ Renderer::Renderer(const char* path) :
 
 	// generate brdf integral tex
 	{
+		Pipeline brdfIntegralPipeline(m_ctx.device(), m_heap.layout(), brdfintegral_comp);
 		u32 brdfImageHandle = m_heap.allocImageHandle(ptr(m_brdfIntegralTex.viewCI()), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		vkBeginCommandBuffer(m_computeCmdModelThread, ptr(VkCommandBufferBeginInfo{ .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT }));
 		
 		vkCmdInitializeColorImage(m_computeCmdModelThread, m_brdfIntegralTex.image());
 		m_heap.bind(m_computeCmdModelThread);
 
-		vkCmdBindPipeline(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, m_brdfIntegralPipeline);
+		brdfIntegralPipeline.bind(m_computeCmdModelThread);
 		vkCmdPushConstants(m_computeCmdModelThread, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(u32), &brdfImageHandle);
 
 		vkCmdDispatch(m_computeCmdModelThread, (m_brdfIntegralLUTSize + 7) / 8, (m_brdfIntegralLUTSize + 7) / 8, 1);
@@ -254,19 +255,6 @@ Renderer::Renderer(const char* path) :
 	// shadow map image view
 	{
 		vkCreateImageView(m_ctx.device(), ptr(m_shadowMap.viewCI()), nullptr, &m_shadowMapView);
-	}
-
-	// Color Pass Pipelines
-	{
-		m_opaquePipeline = createGraphicsPipeline(model_vert, opaque_frag, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_EQUAL, false, true);
-		m_blendPipeline = createGraphicsPipeline(model_vert, blend_frag, VK_CULL_MODE_NONE, VK_COMPARE_OP_GREATER, false, false);
-		m_skyboxPipeline = createGraphicsPipeline(skybox_vert, skybox_frag, VK_CULL_MODE_NONE, VK_COMPARE_OP_EQUAL, false, true);
-	}
-
-	// Depth Only Pipelines
-	{
-		m_prepassPipeline = createGraphicsPipeline(prepass_vert, {}, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
-		m_shadowPipeline = createGraphicsPipeline(shadow_vert, {}, VK_CULL_MODE_BACK_BIT, VK_COMPARE_OP_GREATER, true, false);
 	}
 
 	// ImGui
@@ -413,26 +401,6 @@ Renderer::~Renderer() {
 
 	vkDestroyCommandPool(m_ctx.device(), m_transferPoolModelThread, nullptr);
 	vkDestroyCommandPool(m_ctx.device(), m_computePoolModelThread, nullptr);
-
-	vkDestroyPipeline(m_ctx.device(), m_blitPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_fxaaPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_bloomUpsamplePipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_bloomDownsamplePipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_uiCompositePipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_postprocessingPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_transparencyCompositePipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_brdfIntegralPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_radiancePipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_irradiancePipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_cubeMipPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_cubePipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_mipPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_srgbMipPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_skyboxPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_shadowPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_prepassPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_blendPipeline, nullptr);
-	vkDestroyPipeline(m_ctx.device(), m_opaquePipeline, nullptr);
 
 	vkDestroyImageView(m_ctx.device(), m_shadowMapView, nullptr);
 	m_heap.freeImageHandle(m_brdfIntegralTexHandle);

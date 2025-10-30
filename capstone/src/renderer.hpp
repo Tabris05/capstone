@@ -20,6 +20,7 @@
 #include "descriptor_heap.hpp"
 #include "window.hpp"
 #include "image_handle.hpp"
+#include "pipeline.hpp"
 
 class Renderer {
 	public:
@@ -187,12 +188,6 @@ class Renderer {
 		std::vector<VkSemaphore> m_swapchainSems;
 		std::vector<BloomMip> m_bloomMips;
 
-		VkPipeline m_prepassPipeline = {};
-		VkPipeline m_shadowPipeline = {};
-		VkPipeline m_opaquePipeline = {};
-		VkPipeline m_blendPipeline = {};
-
-		VkPipeline m_skyboxPipeline = {};
 		
 		VkCommandPool m_transferPoolModelThread = {};
 		VkCommandBuffer m_transferCmdModelThread = {};
@@ -204,20 +199,24 @@ class Renderer {
 		VkCommandPool m_computePoolSkyboxThread = {};
 		VkCommandBuffer m_computeCmdSkyboxThread = {};
 
-		VkPipeline m_mipPipeline = {};
-		VkPipeline m_srgbMipPipeline = {};
-		VkPipeline m_cubePipeline = {};
-		VkPipeline m_cubeMipPipeline = {};
-		VkPipeline m_irradiancePipeline = {};
-		VkPipeline m_radiancePipeline = {};
-		VkPipeline m_brdfIntegralPipeline = {};
-		VkPipeline m_transparencyCompositePipeline = {};
-		VkPipeline m_postprocessingPipeline = {};
-		VkPipeline m_uiCompositePipeline = {};
-		VkPipeline m_bloomDownsamplePipeline = {};
-		VkPipeline m_bloomUpsamplePipeline = {};
-		VkPipeline m_fxaaPipeline = {};
-		VkPipeline m_blitPipeline = {};
+		Pipeline m_prepassPipeline;
+		Pipeline m_shadowPipeline;
+		Pipeline m_opaquePipeline;
+		Pipeline m_blendPipeline;
+		Pipeline m_skyboxPipeline;
+		Pipeline m_mipPipeline;
+		Pipeline m_srgbMipPipeline;
+		Pipeline m_cubePipeline;
+		Pipeline m_cubeMipPipeline;
+		Pipeline m_irradiancePipeline;
+		Pipeline m_radiancePipeline;
+		Pipeline m_transparencyCompositePipeline;
+		Pipeline m_postprocessingPipeline;
+		Pipeline m_uiCompositePipeline;
+		Pipeline m_bloomDownsamplePipeline;
+		Pipeline m_bloomUpsamplePipeline;
+		Pipeline m_fxaaPipeline;
+		Pipeline m_blitPipeline;
 
 		Semaphore m_renderSem;
 		Semaphore m_modelSem;
@@ -303,9 +302,6 @@ class Renderer {
 		Model createModel(std::filesystem::path path);
 
 		Skybox createSkybox(std::filesystem::path path);
-
-		VkPipeline createComputePipeline(std::initializer_list<u32> cs);
-		VkPipeline createGraphicsPipeline(std::initializer_list<u32> vs, std::initializer_list<u32> fs, VkCullModeFlagBits cullMode, VkCompareOp compareOp, bool depthWrite, bool hasColorAttachment);
 
 		void handleInput(f32 deltaTime);
 		void render(f32 thisFrame);

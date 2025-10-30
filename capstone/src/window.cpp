@@ -1,5 +1,6 @@
 #include "window.hpp"
 #include <nfd/nfd_glfw3.h>
+#include <utility>
 
 bool Window::shouldClose() {
 	return glfwWindowShouldClose(m_window);
@@ -72,3 +73,13 @@ Window::~Window() {
 	glfwDestroyWindow(m_window);
 	glfwTerminate();
 }
+
+Window::Window(Window&& src) {
+	memcpy(this, &src, sizeof(Window));
+	memset(&src, 0, sizeof(Window));
+}
+
+Window& Window::operator=(Window&& src) {
+	this->~Window();
+	new (this) Window(std::move(src)); return *this;
+};

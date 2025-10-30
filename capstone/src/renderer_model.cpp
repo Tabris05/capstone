@@ -89,7 +89,7 @@ Renderer::Model Renderer::createModel(std::filesystem::path path) {
 		u32 mip0Handle = m_heap.allocImageHandle(&ci, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		mipHandles.push_back(mip0Handle);
 
-		vkCmdBindPipeline(m_computeCmdModelThread, VK_PIPELINE_BIND_POINT_COMPUTE, isSrgb[idx] ? m_srgbMipPipeline: m_mipPipeline);
+		(isSrgb[idx] ? m_srgbMipPipeline : m_mipPipeline).bind(m_computeCmdModelThread);
 		for(u8 i = 1; i < numMips; i++) {
 			ci.subresourceRange.baseMipLevel = i;
 			u32 curHandle = m_heap.allocImageHandle(&ci, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);

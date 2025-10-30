@@ -93,3 +93,12 @@ Semaphore::Semaphore(VkDevice device) : m_device(device) {
 		})
 	}), nullptr, &m_semaphore);
 }
+
+Semaphore::Semaphore(Semaphore&& src) {
+	memcpy(this, &src, sizeof(Semaphore));
+	memset(&src, 0, sizeof(Semaphore));
+}
+Semaphore& Semaphore::operator=(Semaphore&& src) {
+	this->~Semaphore();
+	new (this) Semaphore(std::move(src)); return *this;
+};

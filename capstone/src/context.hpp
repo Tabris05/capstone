@@ -19,6 +19,11 @@ public:
 	VulkanContext();
 	~VulkanContext();
 
+	VulkanContext(const VulkanContext&) = delete;
+	VulkanContext& operator=(const VulkanContext&) = delete;
+	VulkanContext(VulkanContext&& src);
+	VulkanContext& operator=(VulkanContext&& src);
+
 private:
 	u32 getQueue(VkQueueFlags include, VkQueueFlags exclude = 0);
 

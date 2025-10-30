@@ -460,7 +460,7 @@ void Renderer::render(f32 thisFrame) {
 		}));
 
 		if(m_model.numOpaqueDrawCommands > 0) {
-			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
+			m_shadowPipeline.bind(frameData.cmdBuffer);
 			vkCmdBindIndexBuffer(frameData.cmdBuffer, m_model.indexBuffer.buffer(), 0, VK_INDEX_TYPE_UINT32);
 			vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pushConstants);
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
@@ -490,7 +490,7 @@ void Renderer::render(f32 thisFrame) {
 		}));
 
 		if(m_model.numOpaqueDrawCommands > 0) {
-			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_prepassPipeline);
+			m_prepassPipeline.bind(frameData.cmdBuffer);
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 		}
 
@@ -522,12 +522,12 @@ void Renderer::render(f32 thisFrame) {
 		}));
 
 		if(m_model.numOpaqueDrawCommands > 0) {
-			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_opaquePipeline);
+			m_opaquePipeline.bind(frameData.cmdBuffer);
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), 0, m_model.numOpaqueDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 		}
 
 		if(m_skybox.environmentMap.image() != VkImage{}) {
-			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_skyboxPipeline);
+			m_skyboxPipeline.bind(frameData.cmdBuffer);
 
 			struct {
 				glm::mat4 transform;
@@ -563,7 +563,7 @@ void Renderer::render(f32 thisFrame) {
 				})
 			}));
 
-			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_blendPipeline);
+			m_blendPipeline.bind(frameData.cmdBuffer);
 			vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pushConstants);
 			vkCmdDrawIndexedIndirect(frameData.cmdBuffer, m_model.indirectBuffer.buffer(), m_model.numOpaqueDrawCommands * sizeof(VkDrawIndexedIndirectCommand), m_model.numBlendDrawCommands, sizeof(VkDrawIndexedIndirectCommand));
 			vkCmdEndRendering(frameData.cmdBuffer);
@@ -598,7 +598,7 @@ void Renderer::render(f32 thisFrame) {
 		if(m_model.numBlendDrawCommands > 0) {
 			vkCmdBarrier(frameData.cmdBuffer, { { PipelineStage::FragmentWrite, PipelineStage::ComputeRead }, { PipelineStage::ColorTarget, PipelineStage::Compute } });
 
-			vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_transparencyCompositePipeline);
+			m_transparencyCompositePipeline.bind(frameData.cmdBuffer);
 
 			struct {
 				void* oitBuffer;
@@ -639,7 +639,7 @@ void Renderer::render(f32 thisFrame) {
 			{ PipelineStage::CopyRead, PipelineStage::Compute }
 		});
 
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_bloomDownsamplePipeline);
+		m_bloomDownsamplePipeline.bind(frameData.cmdBuffer);
 		for(u32 i = 1; i < m_bloomMips.size(); i++) {
 			struct {
 				ImageHandle sampled;
@@ -655,7 +655,7 @@ void Renderer::render(f32 thisFrame) {
 			vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeWrite, PipelineStage::ComputeRead);
 		}
 
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_bloomUpsamplePipeline);
+		m_bloomUpsamplePipeline.bind(frameData.cmdBuffer);
 		for(u32 i = m_bloomMips.size() - 1; i >= 1; i--) {
 			vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ComputeRead, PipelineStage::Compute);
 			ImageHandle handles[] = { ImageHandle(m_bloomMips[i].sampledHandle, m_genericSamplerHandle), ImageHandle(m_bloomMips[i - 1].storageHandle) };
@@ -668,7 +668,7 @@ void Renderer::render(f32 thisFrame) {
 
 	// post-processing pass
 	{
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_postprocessingPipeline);
+		m_postprocessingPipeline.bind(frameData.cmdBuffer);
 		struct {
 			ImageHandle colorTarget;
 			ImageHandle bloomTarget;
@@ -686,8 +686,8 @@ void Renderer::render(f32 thisFrame) {
 	// fxaa pass
 	{
 		vkCmdInitializeColorImage(frameData.cmdBuffer, m_swapchainImages[imageIndex]);
-
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_AAIdx == 1 ? m_fxaaPipeline : m_blitPipeline);
+		
+		(m_AAIdx == 1 ? m_fxaaPipeline : m_blitPipeline).bind(frameData.cmdBuffer);
 		ImageHandle handles[] = { ImageHandle(m_colorTargetHandleSampled, m_genericSamplerHandle), ImageHandle(m_swapchainHandles[imageIndex]) };
 		
 		vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(handles), handles);
@@ -699,7 +699,7 @@ void Renderer::render(f32 thisFrame) {
 	{
 		vkCmdBarrier(frameData.cmdBuffer, PipelineStage::ColorTarget, PipelineStage::ComputeRead);
 
-		vkCmdBindPipeline(frameData.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_uiCompositePipeline);
+		m_uiCompositePipeline.bind(frameData.cmdBuffer);
 		ImageHandle handles[] = { ImageHandle(m_swapchainHandles[imageIndex]), ImageHandle(m_uiTargetHandle) };
 
 		vkCmdPushConstants(frameData.cmdBuffer, m_heap.layout(), VK_SHADER_STAGE_ALL, 0, sizeof(handles), handles);
