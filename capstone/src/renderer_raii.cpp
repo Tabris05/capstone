@@ -94,18 +94,6 @@ Renderer::Renderer(const char* path) :
 		glfwCreateWindowSurface(m_ctx.instance(), m_window.window(), nullptr, &m_surface);
 
 		u32 count = 0;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(m_ctx.physicalDevice(), m_surface, &count, nullptr);
-		std::vector<VkSurfaceFormatKHR> formats(count);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(m_ctx.physicalDevice(), m_surface, &count, formats.data());
-		m_surfaceFormat = formats.front();
-		for(auto format : formats) {
-			if(!vkuFormatIsSRGB(format.format)) {
-				m_surfaceFormat = format;
-				break;
-			}
-		}
-
-		count = 0;
 		vkGetPhysicalDeviceSurfacePresentModesKHR(m_ctx.physicalDevice(), m_surface, &count, nullptr);
 		std::vector<VkPresentModeKHR> modes(count);
 		vkGetPhysicalDeviceSurfacePresentModesKHR(m_ctx.physicalDevice(), m_surface, &count, modes.data());

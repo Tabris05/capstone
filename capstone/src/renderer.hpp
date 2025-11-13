@@ -180,7 +180,6 @@ class Renderer {
 		DescriptorHeap m_heap;
 
 		VkSurfaceKHR m_surface = {};
-		VkSurfaceFormatKHR m_surfaceFormat;
 		VkPresentModeKHR m_nonVsyncPresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 		VkSwapchainKHR m_swapchain = {};
 		std::vector<VkImage> m_swapchainImages;

@@ -8,13 +8,13 @@ void Renderer::createSwapchain() {
 	vkCreateSwapchainKHR(m_ctx.device(), ptr(VkSwapchainCreateInfoKHR{
 		.surface = m_surface,
 		.minImageCount = 3,
-		.imageFormat = m_surfaceFormat.format,
-		.imageColorSpace = m_surfaceFormat.colorSpace,
+		.imageFormat = VK_FORMAT_R8G8B8A8_UNORM,
+		.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
 		.imageExtent = { m_window.width(), m_window.height() },
 		.imageArrayLayers = 1,
 		.imageUsage = VK_IMAGE_USAGE_STORAGE_BIT,
-		.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-		.queueFamilyIndexCount = 1,
+		.imageSharingMode = VK_SHARING_MODE_CONCURRENT,
+		.queueFamilyIndexCount = 3,
 		.pQueueFamilyIndices = m_ctx.queueFamilies(),
 		.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
 		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
@@ -34,7 +34,7 @@ void Renderer::createSwapchain() {
 		u32 handle = m_heap.allocImageHandle(ptr(VkImageViewCreateInfo{
 			.image = img,
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = m_surfaceFormat.format,
+			.format = VK_FORMAT_R8G8B8A8_UNORM,
 			.subresourceRange = colorSubresourceRange()
 		}), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		m_swapchainHandles.push_back(handle);

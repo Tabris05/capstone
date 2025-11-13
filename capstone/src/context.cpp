@@ -77,13 +77,12 @@ VulkanContext::VulkanContext() {
 							.pNext = ptr(VkPhysicalDeviceVulkan14Features{
 								.pNext = ptr(VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT{
 									.pNext = ptr(VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT{
-										.pNext = ptr(VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR{.shaderMaximalReconvergence = true }),
+										.pNext = ptr(VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR{ .shaderMaximalReconvergence = true }),
 										.fragmentShaderPixelInterlock = true
 									}),
 									.mutableDescriptorType = true
 								}),
 								.maintenance5 = true,
-								.pushDescriptor = true
 							}),
 							.synchronization2 = true,
 							.dynamicRendering = true
@@ -93,7 +92,6 @@ VulkanContext::VulkanContext() {
 						.descriptorBindingSampledImageUpdateAfterBind = true,
 						.descriptorBindingStorageBufferUpdateAfterBind = true,
 						.descriptorBindingPartiallyBound = true,
-						.descriptorBindingVariableDescriptorCount = true, // foo: delete
 						.runtimeDescriptorArray = true,
 						.scalarBlockLayout = true,
 						.timelineSemaphore = true,

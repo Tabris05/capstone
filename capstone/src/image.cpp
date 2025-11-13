@@ -12,15 +12,13 @@ VkImageViewCreateInfo Image::viewCI() {
 Image::Image(VulkanContext& ctx, u32 width, u32 height, VkFormat format, VkImageUsageFlags usage, u32 mips, b8 cube) :
 	m_device(ctx.device()) {
 
-	VkImageCreateFlags flags = 0;
-	bool srgbStorageImage = format == VK_FORMAT_R8G8B8A8_SRGB && (usage & VK_IMAGE_USAGE_STORAGE_BIT);
-	if(srgbStorageImage) {
-		format = VK_FORMAT_R8G8B8A8_UNORM;
-		flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+	VkImageCreateFlags flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
+	if(cube) {
+		flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 	}
 
 	vkCreateImage(m_device, ptr(VkImageCreateInfo{
-		.flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT | VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT : flags,
+		.flags = flags,
 		.imageType = VK_IMAGE_TYPE_2D,
 		.format = format,
 		.extent = { width, height, 1 },
@@ -41,12 +39,13 @@ Image::Image(VulkanContext& ctx, u32 width, u32 height, VkFormat format, VkImage
 	}), nullptr, &m_mem);
 	vkBindImageMemory(m_device, m_image, m_mem, 0);
 
+	bool srgbStorageImage = (format == VK_FORMAT_R8G8B8A8_SRGB) && (usage & VK_IMAGE_USAGE_STORAGE_BIT);
 	m_viewUsageCI = VkImageViewUsageCreateInfo{ .usage = usage & ~VK_IMAGE_USAGE_STORAGE_BIT };
 	m_viewCI = VkImageViewCreateInfo{
 		.pNext = srgbStorageImage ? &m_viewUsageCI : nullptr,
 		.image = m_image,
 		.viewType = cube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D,
-		.format = srgbStorageImage ? VK_FORMAT_R8G8B8A8_SRGB : format,
+		.format = format,
 		.subresourceRange = (format < 124 || format > 130) ? colorSubresourceRange() : depthSubresourceRange()
 	};
 }
