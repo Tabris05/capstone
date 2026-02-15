@@ -37,7 +37,7 @@ void main() {
 
     if(!gl_HelperInvocation) {
         for(u32 i = 0; i < 4; i++) {
-            if(unpackDepth(pcs.oitBuffer.nodes[baseIndex + i].packedDepthTransmittance) < unpackTransmittance(cur.packedDepthTransmittance)) {
+            if(unpackDepth(pcs.oitBuffer.nodes[baseIndex + i].packedDepthTransmittance) < unpackDepth(cur.packedDepthTransmittance)) {
                 swapNodes(pcs.oitBuffer.nodes[baseIndex + i], cur);
             }
         }
